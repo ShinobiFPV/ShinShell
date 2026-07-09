@@ -16,7 +16,9 @@ export const IPC = {
   projectsSaveRestoreState: 'projects:saveRestoreState',
   projectsCreateFromFolder: 'projects:createFromFolder',
   windowOpenProject: 'window:openProject',
-  windowOpenLauncher: 'window:openLauncher'
+  windowOpenLauncher: 'window:openLauncher',
+  windowNewTerminalTab: 'window:newTerminalTab',
+  commandsRunBackground: 'commands:runBackground'
 } as const
 
 export interface PtySpawnOptions {
@@ -36,4 +38,11 @@ export interface PtyDataEvent {
 export interface PtyExitEvent {
   id: string
   exitCode: number
+}
+
+export interface BackgroundCommandOptions {
+  command: string
+  cwd: string
+  shell: string
+  env: Record<string, string>
 }

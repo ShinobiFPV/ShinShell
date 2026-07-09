@@ -403,6 +403,39 @@ non-elevated state to confirm.
 
 ---
 
+## 5e. M4 verification notes (2026-07-09)
+
+M4 (commands & hotkeys) added: `{workingDir}` / `{env.NAME}` / `{targets.<id>.<field>}` variable
+substitution (§7); `runCommand` dispatch per a command's `runIn` (`new-tab` spawns a fresh terminal
+and types the command + Enter; `active-terminal` types into the focused pane's input *without*
+Enter, per spec — left for the user to review/edit; `background` fires via the main process with no
+visible terminal, since there's no output surface for it yet — that's the deploy tab, §6.7/M6);
+project-scoped hotkeys matching each command's own `hotkey` string (not a hardcoded Ctrl+1..9
+assumption — reads whatever combo is in the config, matching the spec's config-driven design);
+global hotkeys (`` Ctrl+` `` summon/hide the last-focused project window, `Ctrl+Alt+1..9` jump to
+the Nth project, `Ctrl+Alt+T` new terminal tab in the last-focused project); and hotkey conflict
+detection (`findHotkeyConflicts`) — no settings UI exists yet to surface it in, so conflicts log to
+the console for now rather than blocking config load (the config JSON is already meant to be
+human-editable directly, per §3).
+
+**Verified:** variable substitution and conflict detection were run directly against all 11 real
+commands across all 3 seed configs (not synthetic test data) — every `{targets.shinobi.user}` /
+`{targets.shinobi.host}` substitution produced the correct real values (`shinobi` /
+`192.168.1.203`), and conflict detection correctly found zero conflicts (as expected — the hotkey
+table was designed collision-free back in Phase 0). Confirmed no regressions: the app still launches
+and all three project windows still load and spawn terminals correctly with the new code active.
+
+**Not live-verified:** actually pressing a hotkey (project-scoped Ctrl+1..9/command-specific, or the
+global Ctrl+`` ` ``/Ctrl+Alt+1..9/Ctrl+Alt+T bindings) — this environment's synthetic keyboard input
+doesn't reliably reach the app (same limitation noted in M1/M2: `SendKeys`/`SendInput` deliver mouse
+clicks fine but not keystrokes here). Didn't work around it by actually triggering a real deploy/SSH
+command either, since several of the real bound commands (`./deploy.ps1`, SSH to shinobi) touch
+real infrastructure — not something to fire off as a side effect of UI testing. Worth a manual
+press-through: open IMQ2, hit Ctrl+2 (should open a new tab and run the log-tail SSH command), hit
+Ctrl+3 (status, also SSH — safe/read-only either way).
+
+---
+
 ## 6. Remaining follow-up work (tracked, not blocking M1)
 
 - [x] Add `Host shinobi-ts` to `~/.ssh/config` — added, pointed at `100.95.193.115` (the Tailscale IP

@@ -10,9 +10,18 @@ interface TerminalProps {
   shell: string
   env: Record<string, string>
   active: boolean
+  /** Typed + Enter right after spawn — used for runIn:"new-tab" commands (§7/§8). */
+  initialCommand?: string
 }
 
-export default function TerminalPane({ paneId, cwd, shell, env, active }: TerminalProps): JSX.Element {
+export default function TerminalPane({
+  paneId,
+  cwd,
+  shell,
+  env,
+  active,
+  initialCommand
+}: TerminalProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -84,6 +93,7 @@ export default function TerminalPane({ paneId, cwd, shell, env, active }: Termin
           if (id === paneId) xterm.write('\r\n[process exited]\r\n')
         })
         onInput = xterm.onData((data) => window.shinshell.pty.write(paneId, data))
+        if (initialCommand) window.shinshell.pty.write(paneId, `${initialCommand}\r`)
         return
       }
       if (xterm.cols === lastCols && xterm.rows === lastRows) return

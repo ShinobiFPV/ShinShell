@@ -7,6 +7,7 @@ interface SplitPaneProps {
   activePaneId: string
   shell: string
   env: Record<string, string>
+  initialCommands: Map<string, string>
   onFocusPane: (paneId: string) => void
   onResize: (splitId: string, sizes: [number, number]) => void
 }
@@ -16,6 +17,7 @@ export default function SplitPane({
   activePaneId,
   shell,
   env,
+  initialCommands,
   onFocusPane,
   onResize
 }: SplitPaneProps): JSX.Element {
@@ -31,6 +33,7 @@ export default function SplitPane({
           shell={shell}
           env={env}
           active={node.id === activePaneId}
+          initialCommand={initialCommands.get(node.id)}
         />
       </div>
     )
@@ -42,6 +45,7 @@ export default function SplitPane({
       activePaneId={activePaneId}
       shell={shell}
       env={env}
+      initialCommands={initialCommands}
       onFocusPane={onFocusPane}
       onResize={onResize}
     />
@@ -53,6 +57,7 @@ function SplitContainer({
   activePaneId,
   shell,
   env,
+  initialCommands,
   onFocusPane,
   onResize
 }: SplitPaneProps & { node: Extract<PaneNode, { type: 'split' }> }): JSX.Element {
@@ -93,6 +98,7 @@ function SplitContainer({
           activePaneId={activePaneId}
           shell={shell}
           env={env}
+          initialCommands={initialCommands}
           onFocusPane={onFocusPane}
           onResize={onResize}
         />
@@ -104,6 +110,7 @@ function SplitContainer({
           activePaneId={activePaneId}
           shell={shell}
           env={env}
+          initialCommands={initialCommands}
           onFocusPane={onFocusPane}
           onResize={onResize}
         />

@@ -9,7 +9,9 @@ import {
   type Tab,
   type PaneNode
 } from './types'
-import type { ProjectConfig } from '../../shared/project'
+import type { ProjectConfig, ProjectCommand } from '../../shared/project'
+import { substituteVariables } from '../../shared/commandSubstitution'
+import { matchesHotkey, findHotkeyConflicts } from './hotkeys'
 import AdminBadge from './AdminBadge'
 
 let idCounter = 0
@@ -34,6 +36,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string>('')
   const restored = useRef(false)
+  const initialCommandsRef = useRef(new Map<string, string>())
 
   // Load the project config, then restore its saved tabs (cwd only — no
   // scrollback, per spec §4) or fall back to a single tab in workingDir.
@@ -71,6 +74,17 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       activeTabId
     })
   }, [projectId, tabs, activeTabId])
+
+  // Conflict detection (§8: "editable in settings with conflict detection")
+  // — no settings UI exists yet, so conflicts surface via console.warn
+  // (visible in DevTools) rather than blocking the (human-editable, §3)
+  // config from loading.
+  useEffect(() => {
+    if (!config) return
+    for (const conflict of findHotkeyConflicts(config)) {
+      console.warn(`[ShinShell] Hotkey conflict in "${config.name}": ${conflict}`)
+    }
+  }, [config])
 
   const activeTab = tabs.find((t) => t.id === activeTabId)
 
@@ -155,7 +169,42 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
     )
   }, [activeTab, closeTab])
 
-  // Project-scoped hotkeys (§8): new tab, close pane/tab, cycle tabs, splits.
+  // Executes a saved command per its runIn (§7/§8):
+  //  - "new-tab": open a fresh terminal tab and type the command + Enter.
+  //  - "active-terminal": type into the focused pane's input, cursor left at
+  //    the end — NOT executed, so the user can review/edit first.
+  //  - "background": fire via the main process, no visible terminal (no
+  //    output surface yet — that's the deploy tab, §6.7/M6).
+  const runCommand = useCallback(
+    (cmd: ProjectCommand) => {
+      if (!config) return
+      const substituted = substituteVariables(cmd.command, config)
+      if (cmd.runIn === 'new-tab') {
+        const tab = makeTab(config.workingDir)
+        initialCommandsRef.current.set(tab.activePaneId, substituted)
+        setTabs((prev) => [...prev, tab])
+        setActiveTabId(tab.id)
+      } else if (cmd.runIn === 'active-terminal') {
+        if (!activeTab) return
+        window.shinshell.pty.write(activeTab.activePaneId, substituted)
+      } else if (cmd.runIn === 'background') {
+        window.shinshell.commands.runBackground({
+          command: substituted,
+          cwd: config.workingDir,
+          shell: config.shell,
+          env: config.env
+        })
+      }
+    },
+    [config, activeTab]
+  )
+
+  // Global Ctrl+Alt+T (§8) — new terminal tab in whichever project window
+  // last had focus, sent from the main process.
+  useEffect(() => window.shinshell.window.onNewTerminalTab(() => newTab()), [newTab])
+
+  // Project-scoped hotkeys (§8): new tab, close pane/tab, cycle tabs, splits,
+  // and each saved command's own hotkey.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (!e.ctrlKey) return
@@ -180,11 +229,17 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       } else if (e.key === '\\') {
         e.preventDefault()
         splitActivePane('horizontal')
+      } else {
+        const cmd = config?.commands.find((c) => c.hotkey && matchesHotkey(e, c.hotkey))
+        if (cmd) {
+          e.preventDefault()
+          runCommand(cmd)
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activeTabId, newTab, closeActivePane, splitActivePane])
+  }, [activeTabId, newTab, closeActivePane, splitActivePane, config, runCommand])
 
   if (!config || !activeTab) {
     return <div className="app-loading">Loading project…</div>
@@ -207,6 +262,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
             activePaneId={t.id === activeTabId ? t.activePaneId : ''}
             shell={config.shell}
             env={config.env}
+            initialCommands={initialCommandsRef.current}
             onFocusPane={t.id === activeTabId ? focusPane : () => {}}
             onResize={t.id === activeTabId ? resizeSplit : () => {}}
           />

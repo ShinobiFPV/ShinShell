@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type PtyDataEvent, type PtyExitEvent, type PtySpawnOptions } from '../shared/ipc'
+import {
+  IPC,
+  type PtyDataEvent,
+  type PtyExitEvent,
+  type PtySpawnOptions,
+  type BackgroundCommandOptions
+} from '../shared/ipc'
 import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
 
 const api = {
@@ -35,7 +41,16 @@ const api = {
   },
   window: {
     openProject: (id: string): void => ipcRenderer.send(IPC.windowOpenProject, id),
-    openLauncher: (): void => ipcRenderer.send(IPC.windowOpenLauncher)
+    openLauncher: (): void => ipcRenderer.send(IPC.windowOpenLauncher),
+    onNewTerminalTab: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on(IPC.windowNewTerminalTab, listener)
+      return () => ipcRenderer.removeListener(IPC.windowNewTerminalTab, listener)
+    }
+  },
+  commands: {
+    runBackground: (opts: BackgroundCommandOptions): void =>
+      ipcRenderer.send(IPC.commandsRunBackground, opts)
   }
 }
 

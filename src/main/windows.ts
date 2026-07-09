@@ -1,12 +1,13 @@
 import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
-import { getProject } from './projects'
+import { getProject, listProjects } from './projects'
 import { createAccentDotIcon } from './icon'
 import { loadAppState, saveAppState } from './appState'
 import { killPtysForWindow } from './pty'
 
 const projectWindows = new Map<string, BrowserWindow>()
 let launcherWindow: BrowserWindow | null = null
+let lastFocusedProjectId: string | null = null
 
 function isDev(): boolean {
   return !app.isPackaged
@@ -69,9 +70,13 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
   win.setTitle(config.name)
   win.setOverlayIcon(createAccentDotIcon(config.accentColor), config.name)
   win.once('ready-to-show', () => win.show())
+  win.on('focus', () => {
+    lastFocusedProjectId = projectId
+  })
   win.on('closed', () => {
     killPtysForWindow(win.id)
     projectWindows.delete(projectId)
+    if (lastFocusedProjectId === projectId) lastFocusedProjectId = null
     persistOpenProjects()
   })
 
@@ -95,4 +100,33 @@ export function restoreWindows(): void {
 
 export function anyWindowOpen(): boolean {
   return BrowserWindow.getAllWindows().length > 0
+}
+
+export function getLastFocusedProjectWindow(): BrowserWindow | null {
+  if (!lastFocusedProjectId) return null
+  const win = projectWindows.get(lastFocusedProjectId)
+  return win && !win.isDestroyed() ? win : null
+}
+
+export function getProjectIdByIndex(index: number): string | undefined {
+  // 1-based, matches Ctrl+Alt+1..9 (§8) — ordering follows listProjects()'s
+  // sort (by name), same order the launcher grid shows them in.
+  return listProjects()[index - 1]?.id
+}
+
+/** Quake-style toggle (§6.9/§8 "summon/hide"): hide the last-focused project
+ *  window if it's currently visible+focused, otherwise show and focus it.
+ *  Falls back to the launcher if no project window has ever been focused. */
+export function toggleSummon(): void {
+  const win = getLastFocusedProjectWindow()
+  if (!win) {
+    createLauncherWindow()
+    return
+  }
+  if (win.isVisible() && win.isFocused()) {
+    win.hide()
+  } else {
+    win.show()
+    win.focus()
+  }
 }

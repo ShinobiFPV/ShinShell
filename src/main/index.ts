@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
-import { IPC, type PtySpawnOptions } from '../shared/ipc'
+import { IPC, type PtySpawnOptions, type BackgroundCommandOptions } from '../shared/ipc'
 import type { ProjectRestoreState } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
 import { listProjects, getProject, saveProjectRestoreState, createProjectFromFolder } from './projects'
 import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen } from './windows'
 import { isElevated, repairAndRelaunch, ensureScheduledTaskIfElevated } from './elevation'
+import { registerGlobalHotkeys, unregisterGlobalHotkeys } from './globalHotkeys'
+import { runBackgroundCommand } from './commands'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
 // %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
@@ -48,12 +50,17 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.windowOpenProject, (_event, id: string) => openProjectWindow(id))
   ipcMain.on(IPC.windowOpenLauncher, () => createLauncherWindow())
+
+  ipcMain.on(IPC.commandsRunBackground, (_event, opts: BackgroundCommandOptions) =>
+    runBackgroundCommand(opts)
+  )
 }
 
 app.whenReady().then(() => {
   registerIpc()
   restoreWindows()
   ensureScheduledTaskIfElevated()
+  registerGlobalHotkeys()
 
   app.on('activate', () => {
     if (!anyWindowOpen()) restoreWindows()
@@ -63,6 +70,10 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   killAllPty()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  unregisterGlobalHotkeys()
 })
 
 app.on('before-quit', () => {
