@@ -22,6 +22,8 @@ import { loadScratchpad, saveScratchpad } from './scratchpad'
 import { getDeployHistory, appendDeployRun } from './deployHistory'
 import { subscribeSshHealth, unsubscribeSshHealth } from './sshHealth'
 import { listListeningPorts, killProcess } from './ports'
+import { getGitStatus } from './gitStatus'
+import { getActivity, setWatchSyncEnabled } from './watchSync'
 import type { DeployRun } from '../shared/ipc'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
@@ -115,6 +117,14 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.portsList, () => listListeningPorts())
   ipcMain.on(IPC.portsKill, (_event, pid: number) => killProcess(pid))
+
+  ipcMain.handle(IPC.gitStatusGet, (_event, workingDir: string) => getGitStatus(workingDir))
+
+  ipcMain.on(IPC.watchSyncSetEnabled, (event, projectId: string, enabled: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) setWatchSyncEnabled(win, projectId, enabled)
+  })
+  ipcMain.handle(IPC.watchSyncGetActivity, (_event, projectId: string) => getActivity(projectId))
 }
 
 app.whenReady().then(() => {

@@ -39,7 +39,11 @@ export const IPC = {
   sshHealthUnsubscribe: 'sshHealth:unsubscribe',
   sshHealthStatus: 'sshHealth:status',
   portsList: 'ports:list',
-  portsKill: 'ports:kill'
+  portsKill: 'ports:kill',
+  gitStatusGet: 'gitStatus:get',
+  watchSyncSetEnabled: 'watchSync:setEnabled',
+  watchSyncGetActivity: 'watchSync:getActivity',
+  watchSyncActivity: 'watchSync:activity'
 } as const
 
 export interface PtySpawnOptions {
@@ -109,4 +113,17 @@ export interface PortEntry {
   pid: number
   processName: string
   protocol: 'TCP' | 'UDP'
+}
+
+export interface GitStatus {
+  branch: string
+  dirty: boolean
+}
+
+export interface WatchSyncActivityEntry {
+  projectId: string
+  timestamp: number
+  changedPath: string
+  commandLabel: string
+  success: boolean
 }

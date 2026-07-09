@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import TabStrip from './TabStrip'
 import SplitPane from './SplitPane'
 import ClaudeChatTab from './ClaudeChatTab'
@@ -8,6 +8,8 @@ import LogTailTab from './LogTailTab'
 import DeployTab from './DeployTab'
 import PortsTab from './PortsTab'
 import SshHealthLight from './SshHealthLight'
+import GitStatusIndicator from './GitStatusIndicator'
+import CommandPalette, { type PaletteAction } from './CommandPalette'
 import {
   findLeaves,
   removeLeaf,
@@ -74,6 +76,8 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string>('')
   const [logPickerOpen, setLogPickerOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [otherProjects, setOtherProjects] = useState<ProjectConfig[]>([])
   const restored = useRef(false)
   const initialCommandsRef = useRef(new Map<string, string>())
   const dirtyEditorTabsRef = useRef(new Set<string>())
@@ -290,12 +294,54 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   // last had focus, sent from the main process.
   useEffect(() => window.shinshell.window.onNewTerminalTab(() => newTab()), [newTab])
 
+  // Refresh the "switch to project" list whenever the palette opens, rather
+  // than keeping it live-subscribed the whole time a window is open.
+  useEffect(() => {
+    if (!paletteOpen) return
+    window.shinshell.projects.list().then((all) => setOtherProjects(all.filter((p) => p.id !== projectId)))
+  }, [paletteOpen, projectId])
+
+  // §6.11 — command palette action list: saved commands, tab actions, and
+  // project switching, in one flat searchable list.
+  const paletteActions = useMemo<PaletteAction[]>(() => {
+    if (!config) return []
+    const actions: PaletteAction[] = config.commands.map((cmd) => ({
+      id: `cmd-${cmd.id}`,
+      category: 'Command',
+      label: cmd.label,
+      run: () => runCommand(cmd)
+    }))
+    actions.push(
+      { id: 'tab-terminal', category: 'Tab', label: 'New Terminal', run: () => newTabOfKind('terminal') },
+      { id: 'tab-claude-code', category: 'Tab', label: 'New Claude Code', run: () => newTabOfKind('claude-code') },
+      { id: 'tab-claude-chat', category: 'Tab', label: 'New Claude Chat', run: () => newTabOfKind('claude-chat') },
+      { id: 'tab-editor', category: 'Tab', label: 'New Editor', run: () => newTabOfKind('editor') },
+      { id: 'tab-log-tail', category: 'Tab', label: 'Tail a Command…', run: () => newTabOfKind('log-tail') },
+      { id: 'tab-scratchpad', category: 'Tab', label: 'Open Scratchpad', run: () => newTabOfKind('scratchpad') },
+      { id: 'tab-deploy', category: 'Tab', label: 'Open Deploy Tab', run: () => newTabOfKind('deploy') },
+      { id: 'tab-ports', category: 'Tab', label: 'Open Ports Panel', run: () => newTabOfKind('ports') },
+      { id: 'tab-close', category: 'Tab', label: 'Close Active Tab', run: () => closeActivePane() }
+    )
+    for (const p of otherProjects) {
+      actions.push({
+        id: `project-${p.id}`,
+        category: 'Project',
+        label: `Switch to ${p.name}`,
+        run: () => window.shinshell.window.openProject(p.id)
+      })
+    }
+    return actions
+  }, [config, otherProjects, runCommand, newTabOfKind, closeActivePane])
+
   // Project-scoped hotkeys (§8): new tab, close pane/tab, cycle tabs, splits,
-  // and each saved command's own hotkey.
+  // command palette, and each saved command's own hotkey.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (!e.ctrlKey) return
-      if (e.key === 't' || e.key === 'T') {
+      if (e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault()
         newTab()
       } else if (e.key === 'w' || e.key === 'W') {
@@ -351,9 +397,11 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
     <div className="app" style={accentStyle}>
       <div className="tab-strip-row">
         <TabStrip tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} onNewTabKind={newTabOfKind} />
+        <GitStatusIndicator workingDir={config.workingDir} />
         <SshHealthLight projectId={projectId} hasTarget={hasHealthTarget} />
         <AdminBadge />
       </div>
+      {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
       {logPickerOpen && (
         <div className="command-picker-backdrop" onMouseDown={() => setLogPickerOpen(false)}>
           <div className="command-picker" onMouseDown={(e) => e.stopPropagation()}>

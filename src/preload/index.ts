@@ -9,7 +9,9 @@ import {
   type ClaudeChatNavState,
   type DeployRun,
   type SshHealthStatus,
-  type PortEntry
+  type PortEntry,
+  type GitStatus,
+  type WatchSyncActivityEntry
 } from '../shared/ipc'
 import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
 
@@ -103,6 +105,20 @@ const api = {
   ports: {
     list: (): Promise<PortEntry[]> => ipcRenderer.invoke(IPC.portsList),
     kill: (pid: number): void => ipcRenderer.send(IPC.portsKill, pid)
+  },
+  gitStatus: {
+    get: (workingDir: string): Promise<GitStatus | null> => ipcRenderer.invoke(IPC.gitStatusGet, workingDir)
+  },
+  watchSync: {
+    setEnabled: (projectId: string, enabled: boolean): void =>
+      ipcRenderer.send(IPC.watchSyncSetEnabled, projectId, enabled),
+    getActivity: (projectId: string): Promise<WatchSyncActivityEntry[]> =>
+      ipcRenderer.invoke(IPC.watchSyncGetActivity, projectId),
+    onActivity: (cb: (e: WatchSyncActivityEntry) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: WatchSyncActivityEntry): void => cb(payload)
+      ipcRenderer.on(IPC.watchSyncActivity, listener)
+      return () => ipcRenderer.removeListener(IPC.watchSyncActivity, listener)
+    }
   }
 }
 

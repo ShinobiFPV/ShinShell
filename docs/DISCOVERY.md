@@ -537,6 +537,68 @@ either belongs to William, not to verification.
 
 ---
 
+## 5h. M7 verification notes (2026-07-09)
+
+M7 (polish) shipped the four remaining spec items plus a theming pass:
+
+- **Watch-and-sync mode** (extends §6.7's Deploy tab): a `chokidar`-based file watcher, gated by
+  each project's existing `watchSync.enabled` config flag (off by default), started/stopped with
+  the project window's lifecycle. Debounced per `watchSync.debounceMs`, re-runs the configured
+  `onChange` command as a one-shot pty spawn (same mechanism M6's Deploy buttons use) on any
+  matching glob save, logging activity (path, success, timestamp) to
+  `%APPDATA%/ShinShell/watch-activity/<id>.json` and pushing it live to the Deploy tab. **Real
+  regression found during `npm install`**: `npm install chokidar` pulled v5.0.0, which dropped
+  built-in glob-pattern support as of v4 — a breaking change from the API our `globs: string[]`
+  schema depends on. Fixed by pinning `chokidar@^3` (resolved 3.6.0), the last major version with
+  native glob support, rather than rewriting the watcher around v4+'s path-list semantics.
+- **Command palette** (§6.11): `Ctrl+Shift+P`, dependency-free subsequence fuzzy matcher
+  (`fuzzy.ts`), listing every project command, all 9 tab-creation actions, and every other open
+  project (to switch to it) — built from the same `runCommand`/`newTabOfKind`/closeActivePane
+  closures `ProjectWindow.tsx` already owns, not a parallel action system.
+- **Git status indicator** (tab strip): polls `git rev-parse --abbrev-ref HEAD` +
+  `git status --porcelain` every 30s per project's `workingDir`; renders nothing for a non-repo
+  folder.
+- **Theming pass**: unified the ad-hoc semantic colors accumulated across M1-M6 into 5 shared
+  H9000 CSS custom properties (red/green/green-bright/cyan/amber, sourced from imq2's own
+  face/webapp/HUD palettes) plus a very subtle (0.05 opacity) static CRT scanline overlay —
+  deliberately restrained given the spec's own "keep it readable and fast" constraint on this item.
+
+**Verified end-to-end in the actual running app, not just build success**, including one real bug
+caught and fixed as a direct result of that verification: clicking the Watch & sync checkbox for
+imq2 correctly flipped `watchSync.enabled` to `true` in the real, live `imq2.json` config (proving
+the toggle round-trips through IPC and persists) — but this is a **real, consequential state**:
+if left on, every saved `.py` file in imq2 would trigger a real deploy to shinobi the next time the
+window opens with a watcher active. It was switched back off immediately (confirmed via a second
+screenshot showing the unchecked box) rather than left toggled on as a side effect of UI testing,
+matching the standing practice of not triggering real infrastructure actions as verification
+side-effects (established in M6 for the Deploy/Kill buttons).
+
+The command palette opened correctly via `Ctrl+Shift+P` sent through `SendKeys` — the first
+milestone where a synthetic keyboard shortcut was confirmed reaching the app at all (M1-M6 notes
+all record this as unreliable/untested). It rendered the full expected action list (7 commands + 9
+tab actions, scrollable). Typing a filter query into the now-focused palette input did **not**
+land, however — consistent with the established pattern that only mouse clicks (and, this once,
+the initiating hotkey) reliably reach the app in this automation environment, not sustained
+keyboard input. Closing the palette via a backdrop click worked cleanly with no leftover state.
+
+**A real, unrelated crash was hit and recovered from during this pass, not swept under the rug**:
+sending `Ctrl+Shift+P` via `SendKeys` also opened a stray, separate "Developer Tools" window
+(cause not fully isolated — possibly a leaked keystroke reaching Chromium's own devtools
+accelerator on a different window/view). Force-closing that stray devtools process appears to have
+taken the whole `npm run dev` Electron instance down with it a few actions later (the main "IMQ2 /
+Q2" window disappeared from the process list entirely, leaving only orphaned helper processes) —
+plausibly because devtools and the app's renderer shared a process in dev mode. Recovered by
+killing all remaining `electron`/`node` processes and restarting `npm run dev` cleanly; the second
+run reproduced none of this. Not chased further since it's dev-mode/automation-input-specific, not
+a packaged-app or real-user-input code path — worth a note if a future session sees the same
+"window vanished mid-session" symptom after a devtools window appears unexpectedly.
+
+The git status indicator correctly showed `main` with a green (clean) dot against the real ShinShell
+repo state throughout. Deploy tab, Ports tab, and all other M1-M6 tabs continued rendering correctly
+under the new theming with no readability regressions.
+
+---
+
 ## 6. Remaining follow-up work (tracked, not blocking M1)
 
 - [x] Add `Host shinobi-ts` to `~/.ssh/config` — added, pointed at `100.95.193.115` (the Tailscale IP

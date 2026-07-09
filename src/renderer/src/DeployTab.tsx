@@ -3,7 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { ProjectConfig } from '../../shared/project'
-import type { DeployRun } from '../../shared/ipc'
+import type { DeployRun, WatchSyncActivityEntry } from '../../shared/ipc'
 import { substituteVariables } from '../../shared/commandSubstitution'
 
 interface DeployTabProps {
@@ -30,12 +30,28 @@ export default function DeployTab({ projectId, config, active }: DeployTabProps)
   const fitRef = useRef<FitAddon | null>(null)
   const [running, setRunning] = useState(false)
   const [history, setHistory] = useState<DeployRun[]>([])
+  const [watchEnabled, setWatchEnabled] = useState(config.watchSync.enabled)
+  const [activity, setActivity] = useState<WatchSyncActivityEntry[]>([])
 
   const deployCommands = config.commands.filter((c) => c.id.startsWith('deploy'))
+  const watchConfigured = config.watchSync.globs.length > 0 && !!config.watchSync.onChange
 
   useEffect(() => {
     window.shinshell.deployHistory.get(projectId).then(setHistory)
   }, [projectId])
+
+  useEffect(() => {
+    window.shinshell.watchSync.getActivity(projectId).then(setActivity)
+    return window.shinshell.watchSync.onActivity((entry) => {
+      if (entry.projectId === projectId) setActivity((prev) => [entry, ...prev].slice(0, 20))
+    })
+  }, [projectId])
+
+  const toggleWatch = useCallback(() => {
+    const next = !watchEnabled
+    setWatchEnabled(next)
+    window.shinshell.watchSync.setEnabled(projectId, next)
+  }, [watchEnabled, projectId])
 
   useEffect(() => {
     const container = containerRef.current
@@ -125,6 +141,19 @@ export default function DeployTab({ projectId, config, active }: DeployTabProps)
         )}
       </div>
       <div ref={containerRef} className="deploy-output" />
+      {watchConfigured && (
+        <div className="watch-sync-bar">
+          <label className="watch-sync-toggle">
+            <input type="checkbox" checked={watchEnabled} onChange={toggleWatch} />
+            Watch &amp; sync ({config.watchSync.globs.join(', ')} → {config.watchSync.onChange})
+          </label>
+          {activity.length > 0 && (
+            <span className="watch-sync-last">
+              last: {activity[0].changedPath} — {activity[0].success ? 'ok' : 'failed'} ({formatWhen(activity[0].timestamp)})
+            </span>
+          )}
+        </div>
+      )}
       <div className="deploy-history">
         <div className="deploy-history-header">Recent runs</div>
         {history.length === 0 ? (

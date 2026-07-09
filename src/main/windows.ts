@@ -6,6 +6,7 @@ import { loadAppState, saveAppState } from './appState'
 import { killPtysForWindow } from './pty'
 import { destroyClaudeChatViewsForWindow } from './claudeChat'
 import { unsubscribeSshHealth } from './sshHealth'
+import { startWatching, stopWatching } from './watchSync'
 
 const projectWindows = new Map<string, BrowserWindow>()
 let launcherWindow: BrowserWindow | null = null
@@ -79,6 +80,7 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
     killPtysForWindow(win.id)
     destroyClaudeChatViewsForWindow(win.id)
     unsubscribeSshHealth(projectId)
+    stopWatching(projectId)
     projectWindows.delete(projectId)
     if (lastFocusedProjectId === projectId) lastFocusedProjectId = null
     persistOpenProjects()
@@ -87,6 +89,7 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
   loadWindow(win, `window=project&id=${encodeURIComponent(projectId)}`)
   projectWindows.set(projectId, win)
   persistOpenProjects()
+  if (config.watchSync.enabled) startWatching(win, projectId)
   return win
 }
 
