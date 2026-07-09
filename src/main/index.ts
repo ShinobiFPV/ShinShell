@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
-import { IPC, type PtySpawnOptions, type BackgroundCommandOptions } from '../shared/ipc'
+import { IPC, type PtySpawnOptions, type BackgroundCommandOptions, type ViewBounds } from '../shared/ipc'
 import type { ProjectRestoreState } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
 import { listProjects, getProject, saveProjectRestoreState, createProjectFromFolder } from './projects'
@@ -7,6 +7,18 @@ import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen 
 import { isElevated, repairAndRelaunch, ensureScheduledTaskIfElevated } from './elevation'
 import { registerGlobalHotkeys, unregisterGlobalHotkeys } from './globalHotkeys'
 import { runBackgroundCommand } from './commands'
+import {
+  createClaudeChatView,
+  setClaudeChatBounds,
+  setClaudeChatVisible,
+  claudeChatBack,
+  claudeChatForward,
+  claudeChatReload,
+  destroyClaudeChatView,
+  warmClaudeChatPartition
+} from './claudeChat'
+import { readFile, writeFile, showOpenFileDialog, showSaveFileDialog } from './files'
+import { loadScratchpad, saveScratchpad } from './scratchpad'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
 // %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
@@ -54,10 +66,42 @@ function registerIpc(): void {
   ipcMain.on(IPC.commandsRunBackground, (_event, opts: BackgroundCommandOptions) =>
     runBackgroundCommand(opts)
   )
+
+  ipcMain.on(IPC.claudeChatCreate, (event, id: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) createClaudeChatView(win, id)
+  })
+  ipcMain.on(IPC.claudeChatSetBounds, (_event, id: string, bounds: ViewBounds) =>
+    setClaudeChatBounds(id, bounds)
+  )
+  ipcMain.on(IPC.claudeChatSetVisible, (_event, id: string, visible: boolean) =>
+    setClaudeChatVisible(id, visible)
+  )
+  ipcMain.on(IPC.claudeChatBack, (_event, id: string) => claudeChatBack(id))
+  ipcMain.on(IPC.claudeChatForward, (_event, id: string) => claudeChatForward(id))
+  ipcMain.on(IPC.claudeChatReload, (_event, id: string) => claudeChatReload(id))
+  ipcMain.on(IPC.claudeChatDestroy, (_event, id: string) => destroyClaudeChatView(id))
+
+  ipcMain.handle(IPC.filesRead, (_event, path: string) => readFile(path))
+  ipcMain.on(IPC.filesWrite, (_event, path: string, content: string) => writeFile(path, content))
+  ipcMain.handle(IPC.filesShowOpenDialog, (event, defaultPath?: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return showOpenFileDialog(win, defaultPath)
+  })
+  ipcMain.handle(IPC.filesShowSaveDialog, (event, defaultPath?: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return showSaveFileDialog(win, defaultPath)
+  })
+
+  ipcMain.handle(IPC.scratchpadLoad, (_event, projectId: string) => loadScratchpad(projectId))
+  ipcMain.on(IPC.scratchpadSave, (_event, projectId: string, content: string) =>
+    saveScratchpad(projectId, content)
+  )
 }
 
 app.whenReady().then(() => {
   registerIpc()
+  warmClaudeChatPartition()
   restoreWindows()
   ensureScheduledTaskIfElevated()
   registerGlobalHotkeys()

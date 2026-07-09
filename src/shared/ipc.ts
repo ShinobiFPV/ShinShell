@@ -18,7 +18,21 @@ export const IPC = {
   windowOpenProject: 'window:openProject',
   windowOpenLauncher: 'window:openLauncher',
   windowNewTerminalTab: 'window:newTerminalTab',
-  commandsRunBackground: 'commands:runBackground'
+  commandsRunBackground: 'commands:runBackground',
+  claudeChatCreate: 'claudeChat:create',
+  claudeChatSetBounds: 'claudeChat:setBounds',
+  claudeChatSetVisible: 'claudeChat:setVisible',
+  claudeChatBack: 'claudeChat:back',
+  claudeChatForward: 'claudeChat:forward',
+  claudeChatReload: 'claudeChat:reload',
+  claudeChatDestroy: 'claudeChat:destroy',
+  claudeChatNavState: 'claudeChat:navState',
+  filesRead: 'files:read',
+  filesWrite: 'files:write',
+  filesShowOpenDialog: 'files:showOpenDialog',
+  filesShowSaveDialog: 'files:showSaveDialog',
+  scratchpadLoad: 'scratchpad:load',
+  scratchpadSave: 'scratchpad:save'
 } as const
 
 export interface PtySpawnOptions {
@@ -45,4 +59,20 @@ export interface BackgroundCommandOptions {
   cwd: string
   shell: string
   env: Record<string, string>
+}
+
+export interface ViewBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ClaudeChatNavState {
+  id: string
+  canGoBack: boolean
+  canGoForward: boolean
+  title: string
+  url: string
+  loading: boolean
 }

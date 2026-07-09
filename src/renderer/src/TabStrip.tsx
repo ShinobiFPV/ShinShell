@@ -1,14 +1,28 @@
-import type { Tab } from './types'
+import type { Tab, TabKind } from './types'
 
 interface TabStripProps {
   tabs: Tab[]
   activeTabId: string
   onSelect: (tabId: string) => void
   onClose: (tabId: string) => void
-  onNew: () => void
+  onNewTabKind: (kind: TabKind) => void
 }
 
-export default function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: TabStripProps): JSX.Element {
+const NEW_TAB_OPTIONS: { kind: TabKind; label: string; title: string }[] = [
+  { kind: 'terminal', label: '+Term', title: 'New terminal (Ctrl+T)' },
+  { kind: 'claude-code', label: '+CC', title: 'New Claude Code terminal' },
+  { kind: 'claude-chat', label: '+Chat', title: 'New Claude chat' },
+  { kind: 'editor', label: '+Edit', title: 'New editor' },
+  { kind: 'scratchpad', label: '+Pad', title: 'Open scratchpad' }
+]
+
+export default function TabStrip({
+  tabs,
+  activeTabId,
+  onSelect,
+  onClose,
+  onNewTabKind
+}: TabStripProps): JSX.Element {
   return (
     <div className="tab-strip">
       {tabs.map((tab) => (
@@ -30,9 +44,18 @@ export default function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }
           </button>
         </div>
       ))}
-      <button className="tab-new" onMouseDown={onNew} aria-label="New terminal tab">
-        +
-      </button>
+      <div className="tab-new-group">
+        {NEW_TAB_OPTIONS.map((opt) => (
+          <button
+            key={opt.kind}
+            className="tab-new"
+            title={opt.title}
+            onMouseDown={() => onNewTabKind(opt.kind)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

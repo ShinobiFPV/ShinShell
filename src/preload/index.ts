@@ -4,7 +4,9 @@ import {
   type PtyDataEvent,
   type PtyExitEvent,
   type PtySpawnOptions,
-  type BackgroundCommandOptions
+  type BackgroundCommandOptions,
+  type ViewBounds,
+  type ClaudeChatNavState
 } from '../shared/ipc'
 import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
 
@@ -51,6 +53,35 @@ const api = {
   commands: {
     runBackground: (opts: BackgroundCommandOptions): void =>
       ipcRenderer.send(IPC.commandsRunBackground, opts)
+  },
+  claudeChat: {
+    create: (id: string): void => ipcRenderer.send(IPC.claudeChatCreate, id),
+    setBounds: (id: string, bounds: ViewBounds): void =>
+      ipcRenderer.send(IPC.claudeChatSetBounds, id, bounds),
+    setVisible: (id: string, visible: boolean): void =>
+      ipcRenderer.send(IPC.claudeChatSetVisible, id, visible),
+    back: (id: string): void => ipcRenderer.send(IPC.claudeChatBack, id),
+    forward: (id: string): void => ipcRenderer.send(IPC.claudeChatForward, id),
+    reload: (id: string): void => ipcRenderer.send(IPC.claudeChatReload, id),
+    destroy: (id: string): void => ipcRenderer.send(IPC.claudeChatDestroy, id),
+    onNavState: (cb: (e: ClaudeChatNavState) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ClaudeChatNavState): void => cb(payload)
+      ipcRenderer.on(IPC.claudeChatNavState, listener)
+      return () => ipcRenderer.removeListener(IPC.claudeChatNavState, listener)
+    }
+  },
+  files: {
+    read: (path: string): Promise<string> => ipcRenderer.invoke(IPC.filesRead, path),
+    write: (path: string, content: string): void => ipcRenderer.send(IPC.filesWrite, path, content),
+    showOpenDialog: (defaultPath?: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.filesShowOpenDialog, defaultPath),
+    showSaveDialog: (defaultPath?: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.filesShowSaveDialog, defaultPath)
+  },
+  scratchpad: {
+    load: (projectId: string): Promise<string> => ipcRenderer.invoke(IPC.scratchpadLoad, projectId),
+    save: (projectId: string, content: string): void =>
+      ipcRenderer.send(IPC.scratchpadSave, projectId, content)
   }
 }
 

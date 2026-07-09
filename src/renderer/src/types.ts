@@ -1,3 +1,7 @@
+import type { TabKind } from '../../shared/project'
+
+export type { TabKind }
+
 export interface LeafPane {
   type: 'leaf'
   id: string
@@ -14,11 +18,37 @@ export interface SplitPaneNode {
 
 export type PaneNode = LeafPane | SplitPaneNode
 
-export interface Tab {
+interface BaseTab {
   id: string
+  kind: TabKind
   title: string
+}
+
+// terminal + claude-code are both pane-tree tabs (splits, per §6.1) — the
+// only difference is claude-code auto-types `claude` on spawn.
+export interface TerminalLikeTab extends BaseTab {
+  kind: 'terminal' | 'claude-code'
   root: PaneNode
   activePaneId: string
+}
+
+export interface ClaudeChatTabData extends BaseTab {
+  kind: 'claude-chat'
+}
+
+export interface EditorTabData extends BaseTab {
+  kind: 'editor'
+  filePath: string | null // null = unsaved new file
+}
+
+export interface ScratchpadTabData extends BaseTab {
+  kind: 'scratchpad'
+}
+
+export type Tab = TerminalLikeTab | ClaudeChatTabData | EditorTabData | ScratchpadTabData
+
+export function isTerminalLike(tab: Tab): tab is TerminalLikeTab {
+  return tab.kind === 'terminal' || tab.kind === 'claude-code'
 }
 
 export function findLeaves(node: PaneNode): LeafPane[] {

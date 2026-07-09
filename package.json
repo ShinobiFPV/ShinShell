@@ -18,6 +18,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-webgl": "^0.18.0",
     "@xterm/xterm": "^5.5.0",
+    "monaco-editor": "^0.55.1",
     "node-pty": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -39,7 +40,12 @@
     "copyright": "ShinTech Electronics",
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "requestedExecutionLevel": "asInvoker",
       "icon": "resources/icon.ico"
@@ -57,7 +63,10 @@
       "out/**/*"
     ],
     "extraResources": [
-      { "from": "resources/default-projects", "to": "default-projects" }
+      {
+        "from": "resources/default-projects",
+        "to": "default-projects"
+      }
     ]
   }
 }

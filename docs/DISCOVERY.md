@@ -436,6 +436,60 @@ Ctrl+3 (status, also SSH — safe/read-only either way).
 
 ---
 
+## 5f. M5 verification notes (2026-07-09)
+
+M5 (Claude & editor tabs) added three new tab kinds on top of terminal, extending the `Tab` type
+into a discriminated union (`terminal | claude-code | claude-chat | editor | scratchpad`):
+
+- **claude-chat** (§6.3): a `WebContentsView` per tab, shared `persist:claude-chat` session
+  partition (so signing in once works across every project window), a standard Chrome UA string
+  (Electron's default UA gets rejected by Google's OAuth flow outright), external links routed to
+  `shell.openExternal` via `setWindowOpenHandler`, and a back/forward/reload toolbar driven by
+  `webContents.navigationHistory`. Bounds are reported by the renderer via `ResizeObserver` and
+  applied with `view.setBounds()` — the view is attached/detached from `win.contentView` on tab
+  switch (not destroyed), so the underlying page and its session survive switching away and back.
+- **claude-code** (§4): not a separate mechanism — just a terminal tab whose pane gets `claude`
+  queued as its initial command, reusing the exact same "type + Enter after spawn" path M4 built
+  for `runIn: "new-tab"` commands.
+- **editor / scratchpad** (§6.4): `monaco-editor` installed directly (no React wrapper, same
+  ref+`useEffect` pattern as `Terminal.tsx`'s xterm.js integration), with local (non-CDN) worker
+  bundling via Vite's `?worker` imports — required for an app that needs to work without internet
+  access; monaco's default self-registration tries to fetch workers from a CDN. Editor tabs get
+  Open/Save dialogs and file read/write over IPC; the scratchpad is a fixed per-project file
+  (`%APPDATA%/ShinShell/scratchpads/<projectId>.md`) with debounced auto-save and no manual save
+  affordance at all, and is a *singleton* — reopening it via `+Pad` focuses the existing tab rather
+  than creating a duplicate.
+
+**A real UX finding, not just an automation footnote:** the first version of the "+" new-tab control
+was a single `<select>` dropdown (5 tab kinds as options). It technically worked, but automating it
+here kept "selecting" the first real option on a single click instead of opening for a second pick —
+which turned out to be a legitimate signal, not just a quirk of this environment: a two-click hidden
+dropdown is worse UX than discoverable buttons for a 5-item, always-relevant action. Replaced it with
+a small row of buttons (`+Term +CC +Chat +Edit +Pad`) — fewer clicks, more discoverable, and
+consistent with the rest of the app's plain-button UI.
+
+**Verified end-to-end, not just built:** all 5 tab kinds were exercised in the actual running app.
+Claude chat loads the real claude.ai sign-in page with a working "Continue with Google" button
+visible (confirms the UA override defeats Electron's default-UA rejection — did not complete the
+actual OAuth flow, since that would sign in with a real account and is Willem's to do, not mine to
+trigger during verification). The claude-code preset launched an actual working Claude Code session
+(v2.1.205, Sonnet 5, correct project working directory) — confirming the initial-command mechanism
+fires correctly for this tab kind too. Monaco loads and renders correctly with no CDN/worker errors.
+Save dialog opens correctly (confirmed via Cancel — didn't type a filename to complete the save,
+since typing doesn't reliably reach the app in this environment, same limitation as M1-M4). A mixed
+set of 6 tabs (3 terminal + claude-chat + editor + scratchpad, then also claude-code) was created,
+and every one of them survived a full app relaunch with the correct kind, label, and content
+restored — including the claude-chat tab correctly reloading claude.ai fresh (no scrollback/session
+*state* restore, consistent with spec's "no scrollback restore" principle applied to browser tabs
+too, though the underlying login session itself does persist via the shared partition).
+
+**Known tradeoff:** bundling `monaco-editor` grew the renderer bundle from ~780KB to ~8MB (monaco
+ships every language's tokenizer/worker by default). Not a problem for a desktop app's install size,
+but worth a look during M7 polish if it ever matters — `monaco-editor`'s language contributions can
+be trimmed to just the languages actually needed instead of importing the whole package.
+
+---
+
 ## 6. Remaining follow-up work (tracked, not blocking M1)
 
 - [x] Add `Host shinobi-ts` to `~/.ssh/config` — added, pointed at `100.95.193.115` (the Tailscale IP
