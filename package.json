@@ -1,7 +1,7 @@
 {
   "name": "shinshell",
   "version": "0.1.0",
-  "description": "ShinTech Electronics — unified dev workspace shell (terminals, Claude chat, editor, deploys)",
+  "description": "Always-elevated Windows desktop shell unifying William Kew's ShinTech dev pipeline (imq2, shinlink-os, AC1Companion) into one tabbed workspace: PowerShell terminals, embedded Claude chat/Code, Monaco editor, one-keystroke deploys with SSH health + log-tail, a ports panel, and a fuzzy command palette. Zero-UAC elevation via a Scheduled Task.",
   "main": "./out/main/index.js",
   "author": "William Kew (ShinTech Electronics)",
   "license": "UNLICENSED",
