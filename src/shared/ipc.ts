@@ -9,6 +9,8 @@ export const IPC = {
   ptyData: 'pty:data',
   ptyExit: 'pty:exit',
   systemHomeDir: 'system:homeDir',
+  systemIsElevated: 'system:isElevated',
+  systemRepair: 'system:repair',
   projectsList: 'projects:list',
   projectsGet: 'projects:get',
   projectsSaveRestoreState: 'projects:saveRestoreState',

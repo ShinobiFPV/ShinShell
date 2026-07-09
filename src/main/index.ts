@@ -4,6 +4,7 @@ import type { ProjectRestoreState } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
 import { listProjects, getProject, saveProjectRestoreState, createProjectFromFolder } from './projects'
 import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen } from './windows'
+import { isElevated, repairAndRelaunch, ensureScheduledTaskIfElevated } from './elevation'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
 // %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
@@ -21,6 +22,8 @@ function registerIpc(): void {
   ipcMain.on(IPC.ptyKill, (_event, id: string) => killPty(id))
 
   ipcMain.handle(IPC.systemHomeDir, () => app.getPath('home'))
+  ipcMain.handle(IPC.systemIsElevated, () => isElevated())
+  ipcMain.on(IPC.systemRepair, () => repairAndRelaunch())
 
   ipcMain.handle(IPC.projectsList, () => listProjects())
   ipcMain.handle(IPC.projectsGet, (_event, id: string) => getProject(id))
@@ -50,6 +53,7 @@ function registerIpc(): void {
 app.whenReady().then(() => {
   registerIpc()
   restoreWindows()
+  ensureScheduledTaskIfElevated()
 
   app.on('activate', () => {
     if (!anyWindowOpen()) restoreWindows()

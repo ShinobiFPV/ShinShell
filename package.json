@@ -41,13 +41,17 @@
       "target": [
         { "target": "nsis", "arch": ["x64"] }
       ],
-      "requestedExecutionLevel": "requireAdministrator",
+      "requestedExecutionLevel": "asInvoker",
       "icon": "resources/icon.ico"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "ShinShell"
+      "shortcutName": "ShinShell",
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "include": "build/installer.nsh"
     },
     "files": [
       "out/**/*"

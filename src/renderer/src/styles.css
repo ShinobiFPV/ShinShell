@@ -30,14 +30,22 @@ body,
 }
 
 /* Tab strip */
-.tab-strip {
+.tab-strip-row {
   display: flex;
   align-items: center;
   background: #161616;
   border-bottom: 1px solid #262626;
-  padding: 4px 6px 0;
-  gap: 2px;
+  padding: 4px 8px 0 6px;
+  gap: 8px;
   -webkit-app-region: drag;
+}
+
+.tab-strip {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
 }
 
 .tab {
@@ -172,6 +180,43 @@ body,
   align-items: center;
   justify-content: space-between;
   margin-bottom: 28px;
+}
+
+.launcher-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+
+/* ADMIN badge (§5.4) */
+.admin-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
+}
+
+.admin-badge-ok {
+  color: #6fe08a;
+  background: rgba(111, 224, 138, 0.1);
+  border-color: rgba(111, 224, 138, 0.25);
+}
+
+.admin-badge-warn {
+  color: #ffb454;
+  background: rgba(255, 180, 84, 0.1);
+  border-color: rgba(255, 180, 84, 0.3);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.admin-badge-warn:hover {
+  background: rgba(255, 180, 84, 0.18);
 }
 
 .launcher-header h1 {

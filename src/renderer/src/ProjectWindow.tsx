@@ -10,6 +10,7 @@ import {
   type PaneNode
 } from './types'
 import type { ProjectConfig } from '../../shared/project'
+import AdminBadge from './AdminBadge'
 
 let idCounter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now()}-${idCounter++}`
@@ -193,7 +194,10 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
 
   return (
     <div className="app" style={accentStyle}>
-      <TabStrip tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} onNew={newTab} />
+      <div className="tab-strip-row">
+        <TabStrip tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} onNew={newTab} />
+        <AdminBadge />
+      </div>
       {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
           tabs never tears down a live pty — only explicit close does. */}
       {tabs.map((t) => (

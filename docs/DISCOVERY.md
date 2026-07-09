@@ -355,6 +355,54 @@ instead when verifying multi-window behavior.
 
 ---
 
+## 5d. M3 verification notes (2026-07-09)
+
+M3 (elevation & packaging) shipped the zero-UAC-prompt launch strategy from spec §5: a Scheduled
+Task named `ShinShell` (`RunLevel=Highest`, `LogonType=Interactive`) that desktop/Start Menu
+shortcuts invoke via `schtasks /run /tn ShinShell` instead of launching the exe directly. The exe's
+own manifest was changed from `requireAdministrator` to `asInvoker` — this was a real correction to
+the spec's example config, not just a style choice: `requireAdministrator` would force a UAC prompt
+on *every* launch path including the fallback/self-repair one, making "detect non-elevated, offer
+repair" impossible to ever reach. `asInvoker` + the scheduled task is what actually delivers "no
+UAC prompt on normal launches."
+
+**A real, non-obvious bug was found and fixed while verifying, not just assumed away**: the first
+version of `build/installer.nsh` built the scheduled-task-registration PowerShell command as one
+long inline string embedded in the NSIS script, using NSIS's `$$` (literal `$`) and `$\'` (literal
+`'`) escape sequences to avoid colliding with PowerShell's own `$env:`/`$variable` syntax. It
+**compiled without error and looked correct on inspection**, but silently no-op'd at install time —
+confirmed by installing (`/S` silent), then checking directly: the exe copied to Program Files
+correctly, but neither the scheduled task nor the shortcuts were created. Diagnosed by adding a
+temporary marker file as the first line of the macro (proved the macro *was* being entered) and
+narrowing from there — the `nsExec::ExecToLog` call with the heavily-escaped inline script was the
+point where execution silently stopped, before even reaching the unconditional `CreateShortcut`
+lines after it.
+
+Fixed by abandoning inline-string escaping entirely: the actual PowerShell logic now lives in plain
+`build/register-task.ps1` / `build/unregister-task.ps1` files, extracted to `$PLUGINSDIR` at
+install/uninstall time via NSIS's `File` command and invoked with `-File`, not `-Command`. This
+sidesteps the NSIS/PowerShell `$`-collision problem by construction — the script content is never
+an NSIS string literal at all. Re-verified end to end after the fix: `Get-ScheduledTask` shows
+correct `RunLevel=Highest`/`LogonType=Interactive`/`UserId`/`Action`, both shortcuts exist with
+`TargetPath=schtasks.exe` and the right `/run /tn ShinShell` arguments, and launching via
+`schtasks /run /tn ShinShell` (exactly what the shortcut does) produced an elevated main process
+(confirmed via a direct Win32 `TokenElevation` check, not just "it looked like it worked") in
+~2 seconds with no UAC dialog. The ADMIN badge correctly shows green in the running app.
+
+**Diagnostic note:** for a `perMachine: true` NSIS install, `$DESKTOP`/`$SMPROGRAMS` resolve to the
+**all-users** locations (`C:\Users\Public\Desktop`, `C:\ProgramData\...\Start Menu\Programs`), not
+the current user's own — worth remembering before concluding a per-machine installer's shortcuts
+"didn't get created" when checking only `$env:USERPROFILE`.
+
+Not yet live-tested: the in-app self-repair flow (`AdminBadge`'s Repair button →
+`repairAndRelaunch()` in `src/main/elevation.ts`). Lower risk than the installer script was, though
+— it builds its PowerShell command via plain Node.js template-literal interpolation passed through
+`execFile` (argv-based, no shell involved), not NSIS string escaping, so the specific failure mode
+found above doesn't apply there. Worth a manual click-through once the app is in a genuinely
+non-elevated state to confirm.
+
+---
+
 ## 6. Remaining follow-up work (tracked, not blocking M1)
 
 - [x] Add `Host shinobi-ts` to `~/.ssh/config` — added, pointed at `100.95.193.115` (the Tailscale IP

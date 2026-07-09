@@ -21,7 +21,9 @@ const api = {
     }
   },
   system: {
-    homeDir: (): Promise<string> => ipcRenderer.invoke(IPC.systemHomeDir)
+    homeDir: (): Promise<string> => ipcRenderer.invoke(IPC.systemHomeDir),
+    isElevated: (): Promise<boolean> => ipcRenderer.invoke(IPC.systemIsElevated),
+    repair: (): void => ipcRenderer.send(IPC.systemRepair)
   },
   projects: {
     list: (): Promise<ProjectConfig[]> => ipcRenderer.invoke(IPC.projectsList),

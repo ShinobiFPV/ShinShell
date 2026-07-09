@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ProjectConfig } from '../../shared/project'
+import AdminBadge from './AdminBadge'
 
 export default function Launcher(): JSX.Element {
   const [projects, setProjects] = useState<ProjectConfig[]>([])
@@ -27,9 +28,12 @@ export default function Launcher(): JSX.Element {
     <div className="launcher">
       <div className="launcher-header">
         <h1>ShinShell</h1>
-        <button className="btn-primary" onClick={openFolder}>
-          + Open Project
-        </button>
+        <div className="launcher-header-actions">
+          <AdminBadge />
+          <button className="btn-primary" onClick={openFolder}>
+            + Open Project
+          </button>
+        </div>
       </div>
 
       {loading ? (
