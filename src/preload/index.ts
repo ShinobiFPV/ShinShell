@@ -6,7 +6,10 @@ import {
   type PtySpawnOptions,
   type BackgroundCommandOptions,
   type ViewBounds,
-  type ClaudeChatNavState
+  type ClaudeChatNavState,
+  type DeployRun,
+  type SshHealthStatus,
+  type PortEntry
 } from '../shared/ipc'
 import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
 
@@ -82,6 +85,24 @@ const api = {
     load: (projectId: string): Promise<string> => ipcRenderer.invoke(IPC.scratchpadLoad, projectId),
     save: (projectId: string, content: string): void =>
       ipcRenderer.send(IPC.scratchpadSave, projectId, content)
+  },
+  deployHistory: {
+    get: (projectId: string): Promise<DeployRun[]> => ipcRenderer.invoke(IPC.deployHistoryGet, projectId),
+    append: (projectId: string, run: DeployRun): void =>
+      ipcRenderer.send(IPC.deployHistoryAppend, projectId, run)
+  },
+  sshHealth: {
+    subscribe: (projectId: string): void => ipcRenderer.send(IPC.sshHealthSubscribe, projectId),
+    unsubscribe: (projectId: string): void => ipcRenderer.send(IPC.sshHealthUnsubscribe, projectId),
+    onStatus: (cb: (e: SshHealthStatus) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: SshHealthStatus): void => cb(payload)
+      ipcRenderer.on(IPC.sshHealthStatus, listener)
+      return () => ipcRenderer.removeListener(IPC.sshHealthStatus, listener)
+    }
+  },
+  ports: {
+    list: (): Promise<PortEntry[]> => ipcRenderer.invoke(IPC.portsList),
+    kill: (pid: number): void => ipcRenderer.send(IPC.portsKill, pid)
   }
 }
 

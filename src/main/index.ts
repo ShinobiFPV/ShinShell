@@ -19,6 +19,10 @@ import {
 } from './claudeChat'
 import { readFile, writeFile, showOpenFileDialog, showSaveFileDialog } from './files'
 import { loadScratchpad, saveScratchpad } from './scratchpad'
+import { getDeployHistory, appendDeployRun } from './deployHistory'
+import { subscribeSshHealth, unsubscribeSshHealth } from './sshHealth'
+import { listListeningPorts, killProcess } from './ports'
+import type { DeployRun } from '../shared/ipc'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
 // %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
@@ -97,6 +101,20 @@ function registerIpc(): void {
   ipcMain.on(IPC.scratchpadSave, (_event, projectId: string, content: string) =>
     saveScratchpad(projectId, content)
   )
+
+  ipcMain.handle(IPC.deployHistoryGet, (_event, projectId: string) => getDeployHistory(projectId))
+  ipcMain.on(IPC.deployHistoryAppend, (_event, projectId: string, run: DeployRun) =>
+    appendDeployRun(projectId, run)
+  )
+
+  ipcMain.on(IPC.sshHealthSubscribe, (event, projectId: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) subscribeSshHealth(win, projectId)
+  })
+  ipcMain.on(IPC.sshHealthUnsubscribe, (_event, projectId: string) => unsubscribeSshHealth(projectId))
+
+  ipcMain.handle(IPC.portsList, () => listListeningPorts())
+  ipcMain.on(IPC.portsKill, (_event, pid: number) => killProcess(pid))
 }
 
 app.whenReady().then(() => {

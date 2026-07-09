@@ -32,7 +32,14 @@ export const IPC = {
   filesShowOpenDialog: 'files:showOpenDialog',
   filesShowSaveDialog: 'files:showSaveDialog',
   scratchpadLoad: 'scratchpad:load',
-  scratchpadSave: 'scratchpad:save'
+  scratchpadSave: 'scratchpad:save',
+  deployHistoryGet: 'deployHistory:get',
+  deployHistoryAppend: 'deployHistory:append',
+  sshHealthSubscribe: 'sshHealth:subscribe',
+  sshHealthUnsubscribe: 'sshHealth:unsubscribe',
+  sshHealthStatus: 'sshHealth:status',
+  portsList: 'ports:list',
+  portsKill: 'ports:kill'
 } as const
 
 export interface PtySpawnOptions {
@@ -42,6 +49,10 @@ export interface PtySpawnOptions {
   rows: number
   shell?: string
   env?: Record<string, string>
+  /** If set, spawns this single command directly (not an interactive shell)
+   *  so the pty's exit code is the command's own — used by the deploy tab
+   *  (§6.7) to record real exit codes in history. */
+  oneShotCommand?: string
 }
 
 export interface PtyDataEvent {
@@ -75,4 +86,27 @@ export interface ClaudeChatNavState {
   title: string
   url: string
   loading: boolean
+}
+
+export interface DeployRun {
+  commandId: string
+  commandLabel: string
+  startedAt: number
+  durationMs: number
+  exitCode: number
+}
+
+export type SshHealthState = 'checking' | 'up' | 'down' | 'unknown'
+
+export interface SshHealthStatus {
+  projectId: string
+  state: SshHealthState
+  lastCheckedAt: number | null
+}
+
+export interface PortEntry {
+  port: number
+  pid: number
+  processName: string
+  protocol: 'TCP' | 'UDP'
 }

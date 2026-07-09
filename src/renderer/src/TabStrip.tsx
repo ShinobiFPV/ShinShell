@@ -13,7 +13,10 @@ const NEW_TAB_OPTIONS: { kind: TabKind; label: string; title: string }[] = [
   { kind: 'claude-code', label: '+CC', title: 'New Claude Code terminal' },
   { kind: 'claude-chat', label: '+Chat', title: 'New Claude chat' },
   { kind: 'editor', label: '+Edit', title: 'New editor' },
-  { kind: 'scratchpad', label: '+Pad', title: 'Open scratchpad' }
+  { kind: 'scratchpad', label: '+Pad', title: 'Open scratchpad' },
+  { kind: 'log-tail', label: '+Log', title: 'Tail a command’s output' },
+  { kind: 'deploy', label: '+Deploy', title: 'Open deploy tab' },
+  { kind: 'ports', label: '+Ports', title: 'Open port panel' }
 ]
 
 export default function TabStrip({

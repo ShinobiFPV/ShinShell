@@ -16,8 +16,18 @@ interface Session {
 
 const sessions = new Map<string, Session>()
 
+function shellArgs(shell: string, oneShotCommand?: string): string[] {
+  if (!oneShotCommand) return [] // interactive shell — normal terminal tabs
+  // PowerShell (5.1 or 7) is the only shell in practice on this machine
+  // today (see docs/DISCOVERY.md §5.5); bash-style shells get -c as a
+  // reasonable fallback if that ever changes.
+  const isPowerShell = /powershell|pwsh/i.test(shell)
+  return isPowerShell ? ['-NoProfile', '-Command', oneShotCommand] : ['-c', oneShotCommand]
+}
+
 export function spawnPty(win: BrowserWindow, opts: PtySpawnOptions): void {
-  const proc = pty.spawn(opts.shell || DEFAULT_SHELL, [], {
+  const shell = opts.shell || DEFAULT_SHELL
+  const proc = pty.spawn(shell, shellArgs(shell, opts.oneShotCommand), {
     name: 'xterm-256color',
     cols: opts.cols,
     rows: opts.rows,

@@ -45,7 +45,33 @@ export interface ScratchpadTabData extends BaseTab {
   kind: 'scratchpad'
 }
 
-export type Tab = TerminalLikeTab | ClaudeChatTabData | EditorTabData | ScratchpadTabData
+// §6.6 — tails a specific saved command's output (typically an ssh-based
+// log command) with a connection-state indicator and reconnect, rather than
+// a plain interactive shell.
+export interface LogTailTabData extends BaseTab {
+  kind: 'log-tail'
+  commandId: string
+}
+
+// §6.7 — one button per "deploy*" project command, streamed output, run
+// history. Not tied to a single command the way log-tail is.
+export interface DeployTabData extends BaseTab {
+  kind: 'deploy'
+}
+
+// §6.8 — listening-port table, not tied to any per-tab state.
+export interface PortsTabData extends BaseTab {
+  kind: 'ports'
+}
+
+export type Tab =
+  | TerminalLikeTab
+  | ClaudeChatTabData
+  | EditorTabData
+  | ScratchpadTabData
+  | LogTailTabData
+  | DeployTabData
+  | PortsTabData
 
 export function isTerminalLike(tab: Tab): tab is TerminalLikeTab {
   return tab.kind === 'terminal' || tab.kind === 'claude-code'

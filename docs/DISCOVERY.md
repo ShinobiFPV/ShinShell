@@ -490,6 +490,53 @@ be trimmed to just the languages actually needed instead of importing the whole 
 
 ---
 
+## 5g. M6 verification notes (2026-07-09)
+
+M6 (pipeline features) shipped the three remaining P1 items — §6.9 (global summon) had already
+landed in M4 as part of the general hotkey system:
+
+- **Log-tail (§6.6):** a new `log-tail` tab kind bound to one of the project's existing saved
+  commands (id `commandId` in `RestoredTab`) rather than a new config field — reuses the exact
+  command/substitution infrastructure from M4 instead of inventing a parallel mechanism. Since any
+  command can reasonably be tailed (not just ones literally named "logs"), `+Log` opens a small
+  picker listing all of the project's commands rather than guessing by name. Tracks connection state
+  (`connecting`/`connected`/`disconnected`) by watching the underlying pty's data/exit events, with a
+  Reconnect button that respawns under a fresh pane id (bumping a `generation` counter forces the
+  spawn effect to re-run cleanly, same trick as a `key` remount).
+- **Deploy tab + SSH health (§6.7):** one button per project command whose `id` starts with
+  `"deploy"` (matches the convention already established by the real seed configs — `deploy`,
+  `deploy-restart`, `deploy-dryrun` — rather than trying to generically parse flag checkboxes out of
+  arbitrary command strings). Runs via a new one-shot pty spawn variant (`oneShotCommand` in
+  `PtySpawnOptions` — spawns the shell with `-Command "<cmd>"` directly instead of an interactive
+  shell + typed command) specifically so the pty's exit code is the *command's* real exit code, not
+  just whatever the interactive shell happens to return — needed for accurate history. History (last
+  20 runs, exit code, duration) persists per-project outside the core config schema
+  (`%APPDATA%/ShinShell/deploy-history/<id>.json`), same pattern as the scratchpad file. The SSH
+  health light polls the target flagged `healthCheck: true` (falling back to the first target) via a
+  plain TCP connect every 15s, independent of the deploy tab.
+- **Port/process panel (§6.8):** `Get-NetTCPConnection` + `Get-NetUDPEndpoint` combined into one
+  PowerShell query (resolves the owning process name inline, converts to JSON) rather than shelling
+  out per-row; `taskkill /PID <pid> /F` for kill, gated behind a confirm dialog since killing an
+  arbitrary process is a real destructive action. Rows matching one of the project's configured
+  `ports` are highlighted. Not explicitly listed among §4's per-project tab kinds, but §6.8 clearly
+  wants it accessible somewhere and every other pipeline feature lives in a tab, so it followed the
+  same pattern (`+Ports`) rather than inventing a separate UI surface.
+
+**Verified end-to-end against real infrastructure, not just the UI shell:** the SSH health light
+correctly showed green for shinobi (a real, live TCP check succeeded). The log-tail picker was used
+to tail imq2's real "Tail Q2 logs" command — this is read-only (`tail -f`, no state changes), so
+unlike deploy/restart commands it was safe to actually run rather than just visually inspect, and it
+successfully streamed genuine live log output from Q2 actually running on shinobi, with the
+connection state correctly showing "Connected" and the exact substituted SSH command displayed. The
+ports panel correctly listed real listening ports on this machine (svchost, System, asus_framework,
+etc.) with accurate PIDs. **Deliberately not exercised**: actually clicking a Deploy button (would
+trigger a real deployment to shinobi) or a Kill button on a real system process (`svchost` etc. are
+not something to kill as a side effect of UI testing) — both render correctly and their underlying
+mechanisms (one-shot pty spawn, `taskkill`) are simple enough to be low-risk, but actually triggering
+either belongs to William, not to verification.
+
+---
+
 ## 6. Remaining follow-up work (tracked, not blocking M1)
 
 - [x] Add `Host shinobi-ts` to `~/.ssh/config` — added, pointed at `100.95.193.115` (the Tailscale IP

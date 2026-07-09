@@ -5,6 +5,7 @@ import { createAccentDotIcon } from './icon'
 import { loadAppState, saveAppState } from './appState'
 import { killPtysForWindow } from './pty'
 import { destroyClaudeChatViewsForWindow } from './claudeChat'
+import { unsubscribeSshHealth } from './sshHealth'
 
 const projectWindows = new Map<string, BrowserWindow>()
 let launcherWindow: BrowserWindow | null = null
@@ -77,6 +78,7 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
   win.on('closed', () => {
     killPtysForWindow(win.id)
     destroyClaudeChatViewsForWindow(win.id)
+    unsubscribeSshHealth(projectId)
     projectWindows.delete(projectId)
     if (lastFocusedProjectId === projectId) lastFocusedProjectId = null
     persistOpenProjects()

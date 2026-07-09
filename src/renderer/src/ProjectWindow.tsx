@@ -4,6 +4,10 @@ import SplitPane from './SplitPane'
 import ClaudeChatTab from './ClaudeChatTab'
 import EditorTab from './EditorTab'
 import ScratchpadTab from './ScratchpadTab'
+import LogTailTab from './LogTailTab'
+import DeployTab from './DeployTab'
+import PortsTab from './PortsTab'
+import SshHealthLight from './SshHealthLight'
 import {
   findLeaves,
   removeLeaf,
@@ -49,6 +53,18 @@ function makeScratchpadTab(): Tab {
   return { id: nextId('tab'), kind: 'scratchpad', title: 'Scratchpad' }
 }
 
+function makeDeployTab(): Tab {
+  return { id: nextId('tab'), kind: 'deploy', title: 'Deploy' }
+}
+
+function makePortsTab(): Tab {
+  return { id: nextId('tab'), kind: 'ports', title: 'Ports' }
+}
+
+function makeLogTailTab(commandId: string, label: string): Tab {
+  return { id: nextId('tab'), kind: 'log-tail', title: label, commandId }
+}
+
 interface ProjectWindowProps {
   projectId: string
 }
@@ -57,6 +73,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const [config, setConfig] = useState<ProjectConfig | null>(null)
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string>('')
+  const [logPickerOpen, setLogPickerOpen] = useState(false)
   const restored = useRef(false)
   const initialCommandsRef = useRef(new Map<string, string>())
   const dirtyEditorTabsRef = useRef(new Set<string>())
@@ -72,7 +89,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       document.title = cfg.name
 
       if (cfg.restore.tabs.length > 0) {
-        const restoredTabs = cfg.restore.tabs.map((t) => restoreTab(t, cfg.workingDir))
+        const restoredTabs = cfg.restore.tabs.map((t) => restoreTab(t, cfg))
         setTabs(restoredTabs)
         const activeIdx = cfg.restore.activeTabId
           ? cfg.restore.tabs.findIndex((t) => t.id === cfg.restore.activeTabId)
@@ -112,8 +129,13 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const newTabOfKind = useCallback(
     (kind: TabKind) => {
       if (!config) return
-      if (kind === 'scratchpad') {
-        const existing = tabs.find((t) => t.kind === 'scratchpad')
+      if (kind === 'log-tail') {
+        if (config.commands.length === 0) return
+        setLogPickerOpen(true)
+        return
+      }
+      if (kind === 'scratchpad' || kind === 'deploy' || kind === 'ports') {
+        const existing = tabs.find((t) => t.kind === kind)
         if (existing) {
           setActiveTabId(existing.id)
           return
@@ -126,7 +148,11 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
             ? makeEditorTab(null)
             : kind === 'scratchpad'
               ? makeScratchpadTab()
-              : makeTerminalTab(config.workingDir, kind)
+              : kind === 'deploy'
+                ? makeDeployTab()
+                : kind === 'ports'
+                  ? makePortsTab()
+                  : makeTerminalTab(config.workingDir, kind)
       if (kind === 'claude-code' && isTerminalLike(tab)) {
         initialCommandsRef.current.set(tab.activePaneId, 'claude')
       }
@@ -137,6 +163,13 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   )
 
   const newTab = useCallback(() => newTabOfKind('terminal'), [newTabOfKind])
+
+  const createLogTailTab = useCallback((cmd: ProjectCommand) => {
+    const tab = makeLogTailTab(cmd.id, cmd.label)
+    setTabs((prev) => [...prev, tab])
+    setActiveTabId(tab.id)
+    setLogPickerOpen(false)
+  }, [])
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -228,8 +261,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   //  - "new-tab": open a fresh terminal tab and type the command + Enter.
   //  - "active-terminal": type into the focused pane's input, cursor left at
   //    the end — NOT executed, so the user can review/edit first.
-  //  - "background": fire via the main process, no visible terminal (no
-  //    output surface yet — that's the deploy tab, §6.7/M6).
+  //  - "background": fire via the main process, no visible terminal.
   const runCommand = useCallback(
     (cmd: ProjectCommand) => {
       if (!config) return
@@ -313,13 +345,27 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   }
 
   const accentStyle = { '--accent': config.accentColor } as React.CSSProperties
+  const hasHealthTarget = config.targets.length > 0
 
   return (
     <div className="app" style={accentStyle}>
       <div className="tab-strip-row">
         <TabStrip tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} onNewTabKind={newTabOfKind} />
+        <SshHealthLight projectId={projectId} hasTarget={hasHealthTarget} />
         <AdminBadge />
       </div>
+      {logPickerOpen && (
+        <div className="command-picker-backdrop" onMouseDown={() => setLogPickerOpen(false)}>
+          <div className="command-picker" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="command-picker-title">Tail which command?</div>
+            {config.commands.map((c) => (
+              <button key={c.id} className="command-picker-item" onMouseDown={() => createLogTailTab(c)}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
           tabs never tears down a live pty, browser session, or editor. */}
       {tabs.map((t) => {
@@ -348,8 +394,27 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                   else dirtyEditorTabsRef.current.delete(t.id)
                 }}
               />
-            ) : (
+            ) : t.kind === 'scratchpad' ? (
               <ScratchpadTab projectId={projectId} active={active} />
+            ) : t.kind === 'deploy' ? (
+              <DeployTab projectId={projectId} config={config} active={active} />
+            ) : t.kind === 'ports' ? (
+              <PortsTab projectPorts={config.ports} />
+            ) : (
+              (() => {
+                const cmd = config.commands.find((c) => c.id === t.commandId)
+                if (!cmd) return <div className="app-loading">Command no longer exists in project config.</div>
+                return (
+                  <LogTailTab
+                    tabId={t.id}
+                    command={substituteVariables(cmd.command, config)}
+                    cwd={config.workingDir}
+                    shell={config.shell}
+                    env={config.env}
+                    active={active}
+                  />
+                )
+              })()
             )}
           </div>
         )
@@ -358,7 +423,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   )
 }
 
-function restoreTab(t: RestoredTab, defaultCwd: string): Tab {
+function restoreTab(t: RestoredTab, config: ProjectConfig): Tab {
   switch (t.kind) {
     case 'claude-chat':
       return makeClaudeChatTab()
@@ -366,11 +431,19 @@ function restoreTab(t: RestoredTab, defaultCwd: string): Tab {
       return makeEditorTab(t.filePath ?? null)
     case 'scratchpad':
       return makeScratchpadTab()
+    case 'deploy':
+      return makeDeployTab()
+    case 'ports':
+      return makePortsTab()
+    case 'log-tail': {
+      const cmd = config.commands.find((c) => c.id === t.commandId)
+      return makeLogTailTab(t.commandId ?? '', cmd?.label ?? 'Log tail')
+    }
     case 'claude-code':
-      return makeTerminalTab(t.cwd || defaultCwd, 'claude-code')
+      return makeTerminalTab(t.cwd || config.workingDir, 'claude-code')
     case 'terminal':
     default:
-      return makeTerminalTab(t.cwd || defaultCwd, 'terminal')
+      return makeTerminalTab(t.cwd || config.workingDir, 'terminal')
   }
 }
 
@@ -381,6 +454,9 @@ function toRestoredTab(t: Tab): RestoredTab {
   }
   if (t.kind === 'editor') {
     return { id: t.id, kind: 'editor', filePath: t.filePath ?? undefined }
+  }
+  if (t.kind === 'log-tail') {
+    return { id: t.id, kind: 'log-tail', commandId: t.commandId }
   }
   return { id: t.id, kind: t.kind }
 }
