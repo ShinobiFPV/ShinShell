@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist/
+dist-electron/
+release/
+*.log
+*.tsbuildinfo
+.DS_Store
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

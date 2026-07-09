@@ -1,0 +1,26 @@
+{
+  "id": "shinlink-os",
+  "name": "ShinLink OS",
+  "accentColor": "#FF8000",
+  "workingDir": "C:/Users/billk/Projects/ShinTech/shinlink-os",
+  "shell": "powershell.exe",
+  "env": {},
+  "targets": [
+    { "id": "shinobi", "label": "Pi 5 (shinobi) — LAN", "host": "192.168.1.203", "user": "shinobi", "port": 22, "healthCheck": true },
+    { "id": "shinobi-ts", "label": "Pi 5 (shinobi) — Tailscale", "host": "shinobi-ts", "user": "shinobi", "port": 22, "healthCheck": false }
+  ],
+  "commands": [
+    { "id": "deploy", "label": "Deploy to Pi", "command": "./deploy.ps1", "hotkey": "Ctrl+1", "runIn": "new-tab" },
+    { "id": "deploy-dryrun", "label": "Deploy (dry run)", "command": "./deploy.ps1 -dryrun", "hotkey": "Ctrl+Shift+1", "runIn": "new-tab" },
+    { "id": "logs", "label": "Tail ground station log", "command": "ssh {targets.shinobi.user}@{targets.shinobi.host} tail -n 50 -f shinlink_os.log", "hotkey": "Ctrl+2", "runIn": "new-tab" }
+  ],
+  "watchSync": {
+    "enabled": false,
+    "globs": ["ground/**/*.py"],
+    "ignore": ["**/__pycache__/**", "**/.git/**", "archive/**"],
+    "onChange": "deploy",
+    "debounceMs": 1500
+  },
+  "ports": [8095, 5760, 5761, 3232, 8080, 14550, 8554, 8889, 8888, 5000, 10110, 8010, 30003],
+  "restore": { "tabs": [] }
+}

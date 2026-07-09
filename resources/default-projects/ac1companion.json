@@ -1,0 +1,26 @@
+{
+  "id": "ac1companion",
+  "name": "AC1Companion",
+  "accentColor": "#E10600",
+  "workingDir": "C:/Users/billk/Projects/ShinTech/AC1Companion",
+  "shell": "powershell.exe",
+  "env": {},
+  "targets": [
+    { "id": "shinobi", "label": "Pi 5 (shinobi) — LAN", "host": "192.168.1.203", "user": "shinobi", "port": 22, "healthCheck": true }
+  ],
+  "commands": [
+    { "id": "dev", "label": "Start dev server", "command": "./scripts/dev.ps1", "hotkey": "Ctrl+1", "runIn": "new-tab" },
+    { "id": "deploy-backend", "label": "Deploy backend to Pi", "command": "./scripts/deploy-backend.ps1", "hotkey": "Ctrl+2", "runIn": "new-tab" },
+    { "id": "logs", "label": "Tail ac-companion service log", "command": "ssh {targets.shinobi.user}@{targets.shinobi.host} journalctl -u ac-companion -f -o cat", "hotkey": "Ctrl+3", "runIn": "new-tab" },
+    { "id": "publish-public", "label": "Publish public release (sanitized)", "command": "./scripts/publish-public.ps1", "runIn": "new-tab" }
+  ],
+  "watchSync": {
+    "enabled": false,
+    "globs": ["backend/**/*.js"],
+    "ignore": ["**/node_modules/**", "**/.git/**"],
+    "onChange": "deploy-backend",
+    "debounceMs": 1500
+  },
+  "ports": [3000],
+  "restore": { "tabs": [] }
+}
