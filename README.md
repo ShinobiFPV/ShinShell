@@ -1,185 +1,274 @@
 # ShinShell
 
-A single, always-elevated Windows desktop app that consolidates William Kew's dev pipeline
-(ShinTech Electronics) into one tabbed, multi-window workspace — PowerShell terminals, Claude
-chat, an editor/scratchpad, and one-keystroke deploys, across `imq2`, `shinlink-os`, and
-`AC1Companion`. See `SHINSHELL_SPEC.md` for the full brief and `docs/DISCOVERY.md` for the Phase 0
-findings and per-milestone verification notes this build is based on.
+**One elevated window to rule them all.**
 
-## Install
+ShinShell exists because William once had six PowerShell windows open, all of them
+titled "Windows PowerShell," and confidently piped a deploy command into the wrong
+one. If you have ever restarted the wrong service, `git push`ed from the wrong repo,
+or watched a command execute in a terminal you *swore* was pointed at the Pi —
+this app is for you. This app is for us.
 
-1. Build the installer (or grab the latest one from a release, once those exist):
-   ```powershell
-   npm install
-   npm run release
-   ```
-   This produces an NSIS installer under `dist/`.
-2. Run the installer. It's a **per-machine** install (writes to Program Files, needs one UAC
-   prompt to run the installer itself — that's normal and separate from ShinShell's own
-   no-prompt-launch behavior described below). It:
-   - Copies the app to `C:\Program Files\ShinShell\`.
-   - Registers a Windows **Scheduled Task** named `ShinShell` (`RunLevel=Highest`,
-     `LogonType=Interactive`, running as the installing user).
-   - Creates a Desktop shortcut and a Start Menu shortcut (`ShinShell` folder), both pointing at
-     `schtasks.exe /run /tn ShinShell` rather than the exe directly.
-3. Launch ShinShell from either shortcut. First launch seeds the three project configs
-   (`imq2`, `shinlink-os`, `ac1companion`) into `%APPDATA%\ShinShell\projects\` from
-   `resources\default-projects\` and opens the launcher window.
+It's a Windows desktop shell that consolidates the whole ShinTech dev loop —
+PowerShell terminals, Claude chat, an editor, and one-keystroke deploys to the Pi —
+into **color-coded project windows** so you always, *always* know which project
+you're about to break.
 
-Uninstalling (via "Add or remove programs") removes the scheduled task and both shortcuts along
-with the app itself. Your project configs, session state, scratchpads, and deploy/watch-sync
-history under `%APPDATA%\ShinShell\` are **not** deleted by uninstall, so reinstalling picks up
-where you left off.
+- **Dev machine:** ScarlettWitch (Windows 11 Pro, user `billk`)
+- **Prime deploy target:** shinobi, a Raspberry Pi 5 that has seen things
+- **Dev root:** `C:\Users\billk\Projects\ShinTech\`
+- **Status:** Phase 0 (discovery) complete ✅ — building toward M1
 
-## Elevation model
+> **For Claude Code:** this file is the authoritative brief. `docs/DISCOVERY.md`
+> holds the Phase 0 inventory and William's resolved answers. Sibling repos are
+> reference-only — look, don't touch.
 
-ShinShell runs **elevated (Administrator)** at all times, with **no UAC prompt on normal
-launches**. This works via the Scheduled Task from install, not the executable's own manifest:
+---
 
-- Task Scheduler is allowed to launch a task with `RunLevel=Highest` at high integrity without
-  showing the interactive UAC consent dialog — that's what the Desktop/Start Menu shortcuts invoke
-  (`schtasks /run /tn ShinShell`), instead of launching `ShinShell.exe` directly.
-- The executable's own manifest is `asInvoker` (see `package.json`'s `build.win`) — a direct
-  double-click of the exe (bypassing the shortcut, e.g. from `C:\Program Files\ShinShell\` in
-  Explorer) launches **unelevated**. This is intentional: it's what lets the app detect "I'm not
-  elevated" and offer to fix itself, rather than forcing a UAC prompt on every possible launch path.
-- Elevation state is always visible via the **ADMIN badge** (top-right of every window). If it's
-  not elevated — e.g. the scheduled task is missing because the app moved machines, was reinstalled
-  outside the installer, or was launched directly instead of via the shortcut — the badge becomes a
-  **Repair** button. Clicking it triggers one UAC prompt, re-registers the scheduled task, and
-  relaunches; every launch after that is prompt-free again via the (now-working) shortcut.
-- If the app is *already* running elevated for any reason but the scheduled task is missing or
-  broken, it repairs the task silently in the background on startup — no prompt needed, since it
-  already has the rights to do so.
+## The pitch
 
-### Manually repairing the scheduled task
+Every open project gets its **own OS window**, tinted with that project's accent
+color, with a matching colored dot on the taskbar icon. Inside each window: tabs.
 
-If the in-app Repair button isn't available (e.g. the app won't launch at all) or you want to
-inspect/fix things by hand, open an **elevated** PowerShell and run:
+| Tab type | What it is |
+|---|---|
+| `terminal` | Real `pwsh.exe` via ConPTY. Oh-My-Posh renders untouched. Splits supported. |
+| `claude-code` | A terminal preset that just runs `claude` in the project dir. |
+| `claude-chat` | claude.ai in an embedded browser, session persists across restarts. |
+| `editor` | Monaco — the literal VS Code editor component, not a sad textarea. |
+| `scratchpad` | Auto-saved per-project markdown for notes and "don't forget" lists. |
+| `log-tail` | SSH into the Pi and watch logs scroll by. Very soothing. |
+| `deploy` | Big deploy button, flag toggles, streamed output, SSH health light. |
 
-```powershell
-# Check whether the task exists and is configured correctly:
-Get-ScheduledTask -TaskName ShinShell | Select-Object TaskName, State
-Get-ScheduledTask -TaskName ShinShell | Select-Object -ExpandProperty Principal   # expect RunLevel=Highest, LogonType=Interactive
+And the whole app runs **persistently elevated with zero UAC prompts** (§ Elevation),
+because clicking "Yes" forty times a day builds no character whatsoever.
 
-# Remove a broken task:
-Unregister-ScheduledTask -TaskName ShinShell -Confirm:$false
+### The projects (and their colors)
 
-# Re-register it (same logic the installer/repair flow runs), pointing at wherever the exe actually is:
-$action = New-ScheduledTaskAction -Execute "C:\Program Files\ShinShell\ShinShell.exe"
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -RunLevel Highest -LogonType Interactive
-Register-ScheduledTask -TaskName "ShinShell" -Action $action -Principal $principal -Force
+| Project | Accent | Why |
+|---|---|---|
+| **imq2 / Q2** | `#33FF66` | H9000 terminal green — Q2's own face |
+| **shinlink-os** | `#FF8000` | McLaren papaya, matching its UI |
+| **AC1Companion** | `#E10600` | Racing red, obviously |
 
-# Launch it manually to confirm (should open with no UAC prompt):
-schtasks /run /tn ShinShell
+If you're about to type a deploy command and the window chrome is *green*, you're
+talking to Q2. If it's *papaya*, hands off the CRSF hardware. That's the entire
+thesis of this application.
+
+---
+
+## Architecture
+
+| Layer | Choice | Why |
+|---|---|---|
+| Shell | **Electron + React + TypeScript** | Same stack as AC1Companion; known territory |
+| Terminal | **xterm.js + node-pty** | The VS Code combo. ConPTY → real pwsh → Oh-My-Posh just works |
+| Browser tab | **WebContentsView** | Persistent session partition; Chrome user-agent override so Google OAuth doesn't sulk |
+| Editor | **Monaco** | Free VS Code editor, zero excuses |
+| File watch | **chokidar** | For watch-and-sync mode |
+| Config | JSON in `%APPDATA%/ShinShell/` | Human-editable, portable |
+| Packaging | **electron-builder** (NSIS) | AC1Companion already proved this pipeline |
+
+Rules of the road: all pty/fs work in the main process, typed IPC channels to the
+renderer, PowerShell 7 (`C:\Program Files\PowerShell\7\pwsh.exe`) as the default
+shell spawned with the normal profile so Oh-My-Posh loads exactly like standalone.
+xterm.js WebGL renderer on, fit addon handling resizes.
+
+---
+
+## Elevation: admin forever, prompts never
+
+The trick is a **Windows Scheduled Task**:
+
+1. The installer (elevated once) registers task `ShinShell` — *Run with highest
+   privileges*, trigger on demand, action: launch the app.
+2. The desktop/taskbar shortcut runs `schtasks /run /tn "ShinShell"` — the app
+   launches elevated and UAC never says a word.
+3. If the task is missing (new machine, someone got tidy), the app detects it's
+   not elevated and offers a one-click self-repair.
+4. A small **ADMIN** badge lives in the UI at all times, because silent power is
+   how accidents happen.
+
+**The honest tradeoff:** *everything* inherits admin — terminals, Claude Code,
+the embedded browser. Also, Windows UIPI blocks drag-and-drop from non-elevated
+Explorer into elevated windows, so there's a proper Open File dialog instead.
+We accept this. We accepted it the fortieth time UAC asked if we were sure.
+
+---
+
+## Features
+
+### P0 — the reason this exists
+
+1. **Terminals** — unlimited pwsh tabs per project, opened in the project dir,
+   Oh-My-Posh intact, copy/paste, search, splits, font config.
+2. **Project windows** — color-coded per the table above, taskbar overlay dots
+   (`setOverlayIcon`), in-app project create/edit.
+3. **Claude chat tab** — persistent login, back/forward/reload, external links
+   punt to the default browser.
+4. **Editor + scratchpad** — Monaco with open/save into the project tree.
+5. **Hotkey command system** — see Hotkeys below.
+6. **Zero-prompt elevation** — see above.
+7. **Session restore** — kill the app, relaunch, everything comes back
+   (windows, tabs, working dirs; scrollback gets to die).
+
+### P1 — the quality of life
+
+8. **Log-tail tab** — runs *any configured SSH command* (learned in Phase 0:
+   neither main app uses systemd, so no journalctl assumptions). Q2 logs to
+   `imq2/logs/imq2.log`; ShinLink's ground station logs to
+   `/home/shinobi/shinlink_os.log`. `tail -f` is the workhorse; journalctl is
+   only for the Pi-Zero vehicle services. Reconnect button, connection state dot.
+9. **Deploy tab + SSH health** — deploy button with **flag toggles** (checkboxes
+   for `-dryrun` / `-restart` instead of a hotkey per permutation), streamed
+   output, deploy history (last 20 runs, exit codes, durations), and a health
+   light that TCP-pokes port 22 on the primary target every ~15s.
+10. **Port/process panel** — lists listening ports, filterable, per-row kill.
+    Ports named in project configs get highlighted, and any port claimed by
+    **two** projects gets a special cross-project collision warning — a class
+    of bug we discovered *while writing this spec* (UDP 8000: imq2's Forza
+    listener vs. Watchtower's APRS feed, same Pi 🎉). Resolution: APRS moves
+    to **8010**; 8000–8003 is telemetry's block now, no squatters.
+11. **Global summon** — Ctrl+` toggles the most recent project window,
+    quake-style.
+
+### P2 — the victory lap
+
+12. **Watch-and-sync** — chokidar on configured globs → deploy on save,
+    debounced. The dev loop becomes *save and it's on the Pi*.
+13. **Command palette** — Ctrl+Shift+P fuzzy search over every saved command,
+    tab action, and project. Also home to deliberately-hotkey-less commands
+    like `Publish shinagent (public sanitized)` — some things should require
+    intent.
+14. **Git status in tab strip** — branch + dirty dot per project.
+15. **Theming** — dark default, ShinTech/H9000 aesthetic encouraged, readability
+    beats vibes.
+
+**Non-goals for v1:** SSH multiplexing UI (just spawn `ssh` in a pty), plugins,
+macOS/Linux, tray-only mode, settings sync. Scope creep is how apps die young.
+
+---
+
+## Project config
+
+One JSON per project in `%APPDATA%/ShinShell/projects/`. Real defaults for all
+three projects live in `docs/DISCOVERY.md` §2 (extracted from the actual repos,
+not vibes). The shape:
+
+```jsonc
+{
+  "id": "imq2",
+  "name": "IMQ2 / Q2",
+  "accentColor": "#33FF66",
+  "workingDir": "C:/Users/billk/Projects/ShinTech/imq2",
+  "shell": "pwsh.exe",
+  "env": {},
+  "targets": [
+    { "id": "shinobi",    "label": "Pi 5 (shinobi) — LAN",       "host": "shinobi",    "user": "shinobi", "port": 22, "healthCheck": true  },
+    { "id": "shinobi-ts", "label": "Pi 5 (shinobi) — Tailscale", "host": "shinobi-ts", "user": "shinobi", "port": 22, "healthCheck": false }
+  ],
+  "commands": [
+    { "id": "deploy",         "label": "Deploy to Pi",       "command": "./deploy.ps1",          "hotkey": "Ctrl+1",       "runIn": "new-tab" },
+    { "id": "deploy-restart", "label": "Deploy + Restart Q2","command": "./deploy.ps1 -restart", "hotkey": "Ctrl+Shift+1", "runIn": "new-tab" },
+    { "id": "logs",           "label": "Tail Q2 logs",       "command": "ssh {targets.shinobi.host} tail -n 50 -f imq2/logs/imq2.log", "hotkey": "Ctrl+2", "runIn": "new-tab" },
+    { "id": "attach",         "label": "Attach Q2 tmux",     "command": "ssh -t {targets.shinobi.host} 'cd imq2 && bash scripts/q2_attach.sh'", "hotkey": "Ctrl+5", "runIn": "new-tab" }
+  ],
+  "watchSync": { "enabled": false, "globs": ["**/*.py"], "ignore": ["**/__pycache__/**", "**/.git/**", "**/.venv/**"], "onChange": "deploy", "debounceMs": 1500 },
+  "ports": [8000, 8001, 8002, 8003, 8091, 8092, 8095, 8765, 8766, 8767],
+  "restore": { "tabs": [] }
+}
 ```
 
-If the Desktop/Start Menu shortcuts themselves went missing (task exists but nothing launches it),
-recreate them pointing at `schtasks.exe` with argument `/run /tn ShinShell` — **not** at the
-ShinShell exe directly, or you'll get a UAC prompt every time instead of none.
+Command strings support `{targets.<id>.<field>}`, `{workingDir}`, and
+`{env.<NAME>}` substitution. `runIn` is `new-tab` | `active-terminal` |
+`background`. Targets accept hostnames or IPs (Pi Zeros use dynamic Tailscale
+hostnames, so they'll be added ad hoc with `healthCheck: false`).
 
-### Tradeoff: UIPI blocks drag-and-drop from non-elevated windows
+**SSH convention (decided in Phase 0):** aliases everywhere. `~/.ssh/config`
+defines `Host shinobi` (LAN) and `Host shinobi-ts` (Tailscale); ShinShell
+configs and both projects' `deploy.ps1` reference the alias. Hardcoded IPs are
+how you end up deploying to a router. Note the Pi user is `shinobi`, not `billk`
+— the machines have callsigns too.
 
-Because ShinShell runs elevated, **Windows' UIPI (User Interface Privilege Isolation) blocks
-drag-and-drop from non-elevated windows** — e.g. dragging a file from a normal (non-admin)
-Explorer window into ShinShell won't work; Windows silently drops the input. This applies to
-everything in the app running at that privilege level, including the embedded Claude chat browser
-tab and Claude Code terminal sessions.
+---
 
-The workaround, everywhere ShinShell needs a file/folder from the user, is an explicit **"Open
-File" / "Open Folder" dialog** (`dialog.showOpenDialog`) rather than drag-and-drop — this is how
-project creation works in the launcher (`+ Open Project`) and how editor tabs open/save files.
+## Hotkeys
 
-## Usage
+Two scopes, one philosophy: same slot = same *kind* of action in every project,
+so muscle memory transfers.
 
-### Windows and tabs
-
-- The **launcher** window shows recent projects plus **+ Open Project** (folder picker) to add a
-  new one. Opening a project (or the pre-registered `imq2` / `shinlink-os` / `ac1companion`) opens
-  its own `BrowserWindow`, tinted with that project's accent color in the tab strip.
-- Each project window's tab strip has one button per tab kind: **+Term** (PowerShell terminal),
-  **+CC** (terminal pre-seeded with `claude`), **+Chat** (embedded claude.ai, signed in once via
-  a shared session across every project window), **+Edit** (Monaco editor, Open/Save dialogs),
-  **+Pad** (a singleton per-project scratchpad, auto-saved, no manual save needed), **+Log**
-  (tail one of the project's saved commands — picker lists them all), **Deploy** (one button per
-  `deploy*` command plus run history and, if configured, the watch-and-sync toggle), and **Ports**
-  (live TCP/UDP listeners on this machine, with kill support and highlighting for the project's own
-  configured ports).
-- Session state (open tabs, cwd, active tab, which project windows were open) persists across
-  restarts automatically — no manual save step.
-- Splits: `Ctrl+\` (vertical) / `Ctrl+Shift+\` (horizontal) split the active terminal pane.
-
-### Command palette
-
-`Ctrl+Shift+P` opens a fuzzy-searchable palette over every project command, every tab-creation
-action, and every other open project (to switch to it). Type to filter; arrow keys or mouse to
-select; Enter or click to run. Commands with no bound hotkey (e.g. `publish-shinagent`,
-`publish-public` — deliberately unbound so a rarely-used public-export action can't be
-fat-fingered) are only reachable this way.
-
-### Hotkeys
-
-Global (work from any ShinShell window):
+**Global (OS-wide):**
 
 | Key | Action |
 |---|---|
-| `` Ctrl+` `` | Summon/hide the last-focused ShinShell window |
-| `Ctrl+Alt+1`…`9` | Jump to the Nth open project window |
-| `Ctrl+Alt+T` | New terminal tab in the last-focused project |
-| `Ctrl+Shift+P` | Open the command palette |
+| Ctrl+` | Summon/hide most recent project window |
+| Ctrl+Alt+1..9 | Jump to project N |
+| Ctrl+Alt+T | New terminal in active project |
 
-Project-scoped (read from each project's own config, so the table below is the current default —
-check a project's `commands` in its config or the palette for the authoritative list):
+**Project-scoped (per the configs):**
 
 | Key | imq2 | shinlink-os | AC1Companion |
 |---|---|---|---|
-| `Ctrl+1` | Deploy to Pi | Deploy to Pi | Start dev server |
-| `Ctrl+Shift+1` | Deploy + restart Q2 | Deploy (dry run) | *(unused)* |
-| `Ctrl+2` | Tail Q2 logs | Tail ground station log | Deploy backend to Pi |
-| `Ctrl+3` | Q2 status (tmux) | *(unused)* | Tail ac-companion log |
-| `Ctrl+4` | Restart Q2 (tmux) | *(unused)* | *(unused)* |
-| `Ctrl+5` | Attach Q2 tmux | *(unused)* | *(unused)* |
+| Ctrl+1 | Deploy to Pi | Deploy to Pi | Deploy |
+| Ctrl+Shift+1 | Deploy + restart Q2 | Deploy (dry run) | — |
+| Ctrl+2 | Tail Q2 logs | Tail ground station log | — |
+| Ctrl+3 | Q2 status (tmux) | *(reserved)* | — |
+| Ctrl+4 | Restart Q2 (tmux) | *(reserved)* | — |
+| Ctrl+5 | Attach Q2 tmux | *(reserved)* | — |
 
-### Deploy tab & watch-and-sync
+Plus the usual: Ctrl+T new tab, Ctrl+W close, Ctrl+Tab cycle. All bindings
+editable, with conflict detection. Commands can either execute in a new tab or
+be **injected into the active terminal without pressing Enter** — typed but not
+fired, cursor at the end, for the trust-but-verify crowd.
 
-The Deploy tab runs any of the project's `deploy*`-prefixed commands as a one-shot process (not an
-interactive shell), so its exit code is the real command's exit code, and keeps the last 20 runs
-(exit code, duration, timestamp) in `%APPDATA%\ShinShell\deploy-history\<project>.json`.
+One deliberate exception: `shinlink-os` gets **no remote "run" hotkey**. The
+ground station is a Tkinter GUI driving real GPIO (CPPM/S.BUS/CRSF) on the Pi's
+attached display. You do not launch that over SSH. You walk over to it like a
+gentleman.
 
-If a project's config has a `watchSync` block with `globs`/`onChange` set, the Deploy tab also
-shows a **Watch & sync** checkbox. Enabling it starts a file watcher (debounced) over the
-configured globs that automatically re-runs the `onChange` command on every matching file save —
-useful for a tight edit/deploy loop, but it's **off by default per project** and stays off across
-restarts until you turn it on, since it means every save to a matching file triggers a real deploy.
-Activity (which file changed, whether the resulting run succeeded, when) is shown live in the same
-tab and persisted to `%APPDATA%\ShinShell\watch-activity\<project>.json`.
+---
 
-### Ports panel
+## Milestones
 
-Lists live TCP/UDP listeners on this machine (via `Get-NetTCPConnection`/`Get-NetUDPEndpoint`) with
-owning process name and PID. Rows matching one of the project's configured `ports` are highlighted.
-Killing a process asks for confirmation first — it's a real, destructive `taskkill /F`.
+Each milestone runs end-to-end before the next begins. Commit per milestone.
 
-### Git status
+- **M0 — Discovery** ✅ `docs/DISCOVERY.md` written, all 11 questions answered.
+- **M1 — Terminal core:** shell + xterm.js/node-pty tabs, Oh-My-Posh verified
+  pixel-identical to standalone pwsh, splits, terminal session restore.
+- **M2 — Projects & windows:** config schema, launcher window, per-project
+  windows, accent colors, taskbar dots.
+- **M3 — Elevation & packaging:** NSIS installer, scheduled-task registration,
+  zero-prompt elevated launch verified, ADMIN badge. (Crib from AC1Companion's
+  electron-builder setup.)
+- **M4 — Commands & hotkeys:** saved commands, variable substitution, both
+  hotkey scopes, injection mode.
+- **M5 — Claude & editor tabs:** claude-chat WebContentsView with OAuth verified,
+  claude-code preset, Monaco + scratchpad.
+- **M6 — Pipeline features:** deploy tab with flag toggles, SSH health, log-tail,
+  port panel with collision warnings.
+- **M7 — Polish:** watch-and-sync, command palette, git status, theming, README.
 
-Each project window's tab strip shows the current branch and a clean/dirty dot for that project's
-`workingDir`, polled every 30s. Not shown for a folder that isn't a git repo.
+---
 
-## Development
+## Definition of "it works"
 
-```powershell
-npm install
-npm run dev      # electron-vite dev server + Electron, hot reload
-npm run build    # production build to out/
-npm run pack     # build + electron-builder --dir (unpacked, for quick local testing)
-npm run release  # build + electron-builder (produces the NSIS installer)
-```
+- [ ] Taskbar click → elevated window in <3s, UAC silent
+- [ ] `whoami /groups` shows elevated; Oh-My-Posh prompt identical to standalone pwsh
+- [ ] Two projects open = two windows, unmistakably different colors, distinguishable in the taskbar
+- [ ] Ctrl+1 in the green window deploys Q2; Ctrl+1 in the papaya window deploys ShinLink — *and you can tell which is which before you press it* (the entire point)
+- [ ] Claude tab stays signed in across app restarts
+- [ ] Force-kill the app → relaunch restores every window, tab, and working dir
+- [ ] Pull the Pi's ethernet → SSH light goes red within ~30s
+- [ ] Everything except the Claude tab and remote features works offline
 
-Requires PowerShell 5.1+ (this dev machine doesn't have PowerShell 7 installed — see
-`docs/DISCOVERY.md` §5.5) and, for `node-pty`'s native module, Visual Studio Build Tools with the
-C++ workload (see `docs/DISCOVERY.md` §5a for the exact machine-specific gotchas hit getting that
-working).
+## House rules (for Claude Code)
 
-Project configs live as plain JSON at `%APPDATA%\ShinShell\projects\<id>.json` (schema in
-`src/shared/project.ts`, defaults seeded from `resources\default-projects\`) — they're meant to be
-hand-edited directly for anything not yet exposed in a settings UI, since none exists yet.
+- Ask before adding dependencies beyond the architecture table.
+- Sibling repos are **read-only reference**. The one-commit fixes noted in
+  Phase 0 (shinlink deploy.ps1 alias, APRS → 8010, stale README path) happen
+  in *those* repos, separately — not smuggled in here.
+- No secrets in the repo. SSH rides the existing key setup; do not build
+  password storage.
+- Windows-only. Every hour spent on cross-platform abstraction is an hour the
+  deploy button doesn't exist.
+- When unsure how something actually works, check the sibling repos first,
+  then ask William. The repos remember; humans improvise.
