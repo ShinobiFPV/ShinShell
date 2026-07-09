@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type PtyDataEvent, type PtyExitEvent, type PtySpawnOptions, type SessionState } from '../shared/ipc'
+import { IPC, type PtyDataEvent, type PtyExitEvent, type PtySpawnOptions } from '../shared/ipc'
+import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
 
 const api = {
   pty: {
@@ -19,12 +20,20 @@ const api = {
       return () => ipcRenderer.removeListener(IPC.ptyExit, listener)
     }
   },
-  session: {
-    load: (): Promise<SessionState> => ipcRenderer.invoke(IPC.sessionLoad),
-    save: (state: SessionState): void => ipcRenderer.send(IPC.sessionSave, state)
-  },
   system: {
     homeDir: (): Promise<string> => ipcRenderer.invoke(IPC.systemHomeDir)
+  },
+  projects: {
+    list: (): Promise<ProjectConfig[]> => ipcRenderer.invoke(IPC.projectsList),
+    get: (id: string): Promise<ProjectConfig | undefined> => ipcRenderer.invoke(IPC.projectsGet, id),
+    saveRestoreState: (id: string, restore: ProjectRestoreState): void =>
+      ipcRenderer.send(IPC.projectsSaveRestoreState, id, restore),
+    createFromFolder: (): Promise<ProjectConfig | null> =>
+      ipcRenderer.invoke(IPC.projectsCreateFromFolder)
+  },
+  window: {
+    openProject: (id: string): void => ipcRenderer.send(IPC.windowOpenProject, id),
+    openLauncher: (): void => ipcRenderer.send(IPC.windowOpenLauncher)
   }
 }
 

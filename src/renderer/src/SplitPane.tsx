@@ -5,6 +5,8 @@ import type { PaneNode } from './types'
 interface SplitPaneProps {
   node: PaneNode
   activePaneId: string
+  shell: string
+  env: Record<string, string>
   onFocusPane: (paneId: string) => void
   onResize: (splitId: string, sizes: [number, number]) => void
 }
@@ -12,6 +14,8 @@ interface SplitPaneProps {
 export default function SplitPane({
   node,
   activePaneId,
+  shell,
+  env,
   onFocusPane,
   onResize
 }: SplitPaneProps): JSX.Element {
@@ -21,19 +25,34 @@ export default function SplitPane({
         className={`pane-leaf${node.id === activePaneId ? ' active' : ''}`}
         onMouseDown={() => onFocusPane(node.id)}
       >
-        <TerminalPane paneId={node.id} cwd={node.cwd} active={node.id === activePaneId} />
+        <TerminalPane
+          paneId={node.id}
+          cwd={node.cwd}
+          shell={shell}
+          env={env}
+          active={node.id === activePaneId}
+        />
       </div>
     )
   }
 
   return (
-    <SplitContainer node={node} activePaneId={activePaneId} onFocusPane={onFocusPane} onResize={onResize} />
+    <SplitContainer
+      node={node}
+      activePaneId={activePaneId}
+      shell={shell}
+      env={env}
+      onFocusPane={onFocusPane}
+      onResize={onResize}
+    />
   )
 }
 
 function SplitContainer({
   node,
   activePaneId,
+  shell,
+  env,
   onFocusPane,
   onResize
 }: SplitPaneProps & { node: Extract<PaneNode, { type: 'split' }> }): JSX.Element {
@@ -69,11 +88,25 @@ function SplitContainer({
   return (
     <div ref={containerRef} className={`split-container ${isRow ? 'row' : 'col'}`}>
       <div className="split-child" style={{ flexBasis: `${node.sizes[0]}%` }}>
-        <SplitPane node={node.children[0]} activePaneId={activePaneId} onFocusPane={onFocusPane} onResize={onResize} />
+        <SplitPane
+          node={node.children[0]}
+          activePaneId={activePaneId}
+          shell={shell}
+          env={env}
+          onFocusPane={onFocusPane}
+          onResize={onResize}
+        />
       </div>
       <div className={`divider ${isRow ? 'divider-row' : 'divider-col'}`} onMouseDown={onDividerDown} />
       <div className="split-child" style={{ flexBasis: `${node.sizes[1]}%` }}>
-        <SplitPane node={node.children[1]} activePaneId={activePaneId} onFocusPane={onFocusPane} onResize={onResize} />
+        <SplitPane
+          node={node.children[1]}
+          activePaneId={activePaneId}
+          shell={shell}
+          env={env}
+          onFocusPane={onFocusPane}
+          onResize={onResize}
+        />
       </div>
     </div>
   )

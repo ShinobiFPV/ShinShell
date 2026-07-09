@@ -26,5 +26,5 @@
     "debounceMs": 1500
   },
   "ports": [8000, 8001, 8002, 8003, 8091, 8092, 8095, 8765, 8766, 8767],
-  "restore": { "tabs": [] }
+  "restore": { "tabs": [], "activeTabId": null }
 }

@@ -9,6 +9,7 @@ import {
   type Tab,
   type PaneNode
 } from './types'
+import type { ProjectConfig } from '../../shared/project'
 
 let idCounter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now()}-${idCounter++}`
@@ -17,61 +18,67 @@ function makeTab(cwd: string): Tab {
   const leafId = nextId('pane')
   return {
     id: nextId('tab'),
-    title: 'PowerShell',
+    title: 'Terminal',
     root: { type: 'leaf', id: leafId, cwd },
     activePaneId: leafId
   }
 }
 
-export default function App(): JSX.Element {
+interface ProjectWindowProps {
+  projectId: string
+}
+
+export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.Element {
+  const [config, setConfig] = useState<ProjectConfig | null>(null)
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string>('')
-  const [homeDir, setHomeDir] = useState<string>('')
   const restored = useRef(false)
 
-  // Restore session on first mount (terminal working directories only —
-  // scrollback restore is explicitly not required, per spec §4).
+  // Load the project config, then restore its saved tabs (cwd only — no
+  // scrollback, per spec §4) or fall back to a single tab in workingDir.
   useEffect(() => {
     ;(async () => {
-      const home = await window.shinshell.system.homeDir()
-      setHomeDir(home)
+      const cfg = await window.shinshell.projects.get(projectId)
+      if (!cfg) return
+      setConfig(cfg)
+      document.title = cfg.name
 
-      const saved = await window.shinshell.session.load()
-      if (saved.tabs.length > 0) {
-        const restoredTabs = saved.tabs.map((t) => makeTab(t.cwd))
+      if (cfg.restore.tabs.length > 0) {
+        const restoredTabs = cfg.restore.tabs.map((t) => makeTab(t.cwd))
         setTabs(restoredTabs)
-        const active = saved.activeTabId
-          ? restoredTabs[saved.tabs.findIndex((t) => t.id === saved.activeTabId)]
-          : restoredTabs[0]
-        setActiveTabId((active ?? restoredTabs[0]).id)
+        const activeIdx = cfg.restore.activeTabId
+          ? cfg.restore.tabs.findIndex((t) => t.id === cfg.restore.activeTabId)
+          : 0
+        setActiveTabId(restoredTabs[Math.max(0, activeIdx)].id)
       } else {
-        const tab = makeTab(home)
+        const tab = makeTab(cfg.workingDir)
         setTabs([tab])
         setActiveTabId(tab.id)
       }
       restored.current = true
     })()
-  }, [])
+  }, [projectId])
 
-  // Persist session (tab cwds only) whenever the tab set changes.
+  // Persist restore state (tab cwds only) into this project's own config.
   useEffect(() => {
     if (!restored.current) return
-    window.shinshell.session.save({
+    window.shinshell.projects.saveRestoreState(projectId, {
       tabs: tabs.map((t) => {
         const activeLeaf = findLeaves(t.root).find((l) => l.id === t.activePaneId) ?? findLeaves(t.root)[0]
         return { id: t.id, cwd: activeLeaf.cwd }
       }),
       activeTabId
     })
-  }, [tabs, activeTabId])
+  }, [projectId, tabs, activeTabId])
 
   const activeTab = tabs.find((t) => t.id === activeTabId)
 
   const newTab = useCallback(() => {
-    const tab = makeTab(homeDir)
+    if (!config) return
+    const tab = makeTab(config.workingDir)
     setTabs((prev) => [...prev, tab])
     setActiveTabId(tab.id)
-  }, [homeDir])
+  }, [config])
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -147,7 +154,7 @@ export default function App(): JSX.Element {
     )
   }, [activeTab, closeTab])
 
-  // Global hotkeys scoped to this window (§8): new tab, close pane/tab, splits.
+  // Project-scoped hotkeys (§8): new tab, close pane/tab, cycle tabs, splits.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (!e.ctrlKey) return
@@ -178,12 +185,14 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [activeTabId, newTab, closeActivePane, splitActivePane])
 
-  if (!activeTab) {
-    return <div className="app-loading">Loading ShinShell…</div>
+  if (!config || !activeTab) {
+    return <div className="app-loading">Loading project…</div>
   }
 
+  const accentStyle = { '--accent': config.accentColor } as React.CSSProperties
+
   return (
-    <div className="app">
+    <div className="app" style={accentStyle}>
       <TabStrip tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} onNew={newTab} />
       {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
           tabs never tears down a live pty — only explicit close does. */}
@@ -192,6 +201,8 @@ export default function App(): JSX.Element {
           <SplitPane
             node={t.root}
             activePaneId={t.id === activeTabId ? t.activePaneId : ''}
+            shell={config.shell}
+            env={config.env}
             onFocusPane={t.id === activeTabId ? focusPane : () => {}}
             onResize={t.id === activeTabId ? resizeSplit : () => {}}
           />

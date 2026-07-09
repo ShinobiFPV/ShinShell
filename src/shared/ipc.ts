@@ -8,9 +8,13 @@ export const IPC = {
   ptyKill: 'pty:kill',
   ptyData: 'pty:data',
   ptyExit: 'pty:exit',
-  sessionLoad: 'session:load',
-  sessionSave: 'session:save',
-  systemHomeDir: 'system:homeDir'
+  systemHomeDir: 'system:homeDir',
+  projectsList: 'projects:list',
+  projectsGet: 'projects:get',
+  projectsSaveRestoreState: 'projects:saveRestoreState',
+  projectsCreateFromFolder: 'projects:createFromFolder',
+  windowOpenProject: 'window:openProject',
+  windowOpenLauncher: 'window:openLauncher'
 } as const
 
 export interface PtySpawnOptions {
@@ -18,6 +22,8 @@ export interface PtySpawnOptions {
   cwd: string
   cols: number
   rows: number
+  shell?: string
+  env?: Record<string, string>
 }
 
 export interface PtyDataEvent {
@@ -28,14 +34,4 @@ export interface PtyDataEvent {
 export interface PtyExitEvent {
   id: string
   exitCode: number
-}
-
-export interface SessionTab {
-  id: string
-  cwd: string
-}
-
-export interface SessionState {
-  tabs: SessionTab[]
-  activeTabId: string | null
 }

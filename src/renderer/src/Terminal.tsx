@@ -7,10 +7,12 @@ import '@xterm/xterm/css/xterm.css'
 interface TerminalProps {
   paneId: string
   cwd: string
+  shell: string
+  env: Record<string, string>
   active: boolean
 }
 
-export default function TerminalPane({ paneId, cwd, active }: TerminalProps): JSX.Element {
+export default function TerminalPane({ paneId, cwd, shell, env, active }: TerminalProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -42,60 +44,60 @@ export default function TerminalPane({ paneId, cwd, active }: TerminalProps): JS
     xtermRef.current = xterm
     fitRef.current = fitAddon
 
-    let disposed = false
     let offData = (): void => {}
     let offExit = (): void => {}
     let onInput = { dispose: (): void => {} }
-    let resizeObserver: ResizeObserver | null = null
+    let spawned = false
+    let lastCols = 0
+    let lastRows = 0
 
-    // Defer the initial fit+spawn to after the browser has finished layout.
-    // Fitting synchronously (e.g. right after mount, especially when several
-    // tabs mount in the same commit) can measure a container before its
-    // final flex size settles, so the *next* real layout pass — landing via
-    // ResizeObserver — reports a different size and triggers a genuine
-    // resize right after spawn. ConPTY/PSReadLine redraw the prompt on
-    // resize (correct behavior), which reads as a duplicated prompt when it
-    // happens moments after the shell's first prompt already printed.
-    requestAnimationFrame(() => {
-      if (disposed) return
+    // Spawn on the *first* ResizeObserver callback rather than a separate
+    // up-front fitAddon.fit(). Two independent size measurements (an early
+    // fit() vs. whatever ResizeObserver reports once real layout settles)
+    // can disagree — more so when another window/renderer is also under
+    // load — and disagreeing means a genuine resize fires moments after
+    // spawn. ConPTY/PSReadLine redraw the prompt on resize (correct
+    // behavior), which reads as a duplicated prompt right after the shell's
+    // first one. Using the observer's own first report for both the spawn
+    // size and the resize baseline removes the race by construction: there
+    // is only ever one measurement pathway.
+    const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit()
-
-      window.shinshell.pty.spawn({
-        id: paneId,
-        cwd,
-        cols: xterm.cols,
-        rows: xterm.rows
-      })
-
-      offData = window.shinshell.pty.onData(({ id, data }) => {
-        if (id === paneId) xterm.write(data)
-      })
-      offExit = window.shinshell.pty.onExit(({ id }) => {
-        if (id === paneId) xterm.write('\r\n[process exited]\r\n')
-      })
-      onInput = xterm.onData((data) => window.shinshell.pty.write(paneId, data))
-
-      // ResizeObserver fires once immediately on observe() with the current
-      // size — guard on an actual change so we don't send a redundant
-      // resize for the size we just fit+spawned with above.
-      let lastCols = xterm.cols
-      let lastRows = xterm.rows
-      resizeObserver = new ResizeObserver(() => {
-        fitAddon.fit()
-        if (xterm.cols === lastCols && xterm.rows === lastRows) return
+      if (!spawned) {
+        spawned = true
         lastCols = xterm.cols
         lastRows = xterm.rows
-        window.shinshell.pty.resize(paneId, xterm.cols, xterm.rows)
-      })
-      resizeObserver.observe(container)
+
+        window.shinshell.pty.spawn({
+          id: paneId,
+          cwd,
+          cols: xterm.cols,
+          rows: xterm.rows,
+          shell,
+          env
+        })
+
+        offData = window.shinshell.pty.onData(({ id, data }) => {
+          if (id === paneId) xterm.write(data)
+        })
+        offExit = window.shinshell.pty.onExit(({ id }) => {
+          if (id === paneId) xterm.write('\r\n[process exited]\r\n')
+        })
+        onInput = xterm.onData((data) => window.shinshell.pty.write(paneId, data))
+        return
+      }
+      if (xterm.cols === lastCols && xterm.rows === lastRows) return
+      lastCols = xterm.cols
+      lastRows = xterm.rows
+      window.shinshell.pty.resize(paneId, xterm.cols, xterm.rows)
     })
+    resizeObserver.observe(container)
 
     return () => {
-      disposed = true
       offData()
       offExit()
       onInput.dispose()
-      resizeObserver?.disconnect()
+      resizeObserver.disconnect()
       window.shinshell.pty.kill(paneId)
       xterm.dispose()
     }

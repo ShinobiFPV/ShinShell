@@ -318,6 +318,43 @@ didn't work — worth a manual check, or adding a UI split button in a later mil
 
 ---
 
+## 5c. M2 verification notes (2026-07-09)
+
+M2 (projects & windows) built on M1: project config loading (seeded from `resources/default-projects/`
+into `%APPDATA%/ShinShell/projects/` on first run), a launcher window (recent-projects grid +
+"Open Project" folder picker), one `BrowserWindow` per open project with an accent-tinted tab strip
+and a taskbar overlay dot (generated with a small dependency-free PNG encoder in `src/main/icon.ts`
+using only Node's built-in `zlib` — no canvas/image library needed), and per-project session restore
+(tab cwds now live in that project's own config `restore` field, not a flat global file; a small
+`app-state.json` tracks which project windows were open so relaunching reopens them directly instead
+of showing the launcher).
+
+`app.setName('ShinShell')` was added so `userData` resolves to `%APPDATA%/ShinShell/` (capital),
+matching the path the spec documents — the lowercase `%APPDATA%/shinshell/` from M1 testing is now
+orphaned local test data, not part of the app going forward.
+
+**A real bug surfaced and was properly fixed this milestone**, not just papered over: the "prompt
+prints twice" issue from M1's notes (§5b) reappeared when a second project window opened while
+another was already active — meaning M1's fix (skip re-fit on mount for already-active tabs) only
+addressed one specific trigger of a more general race, not the root cause. The actual issue: the
+terminal measured its container's size twice through two independent code paths (an up-front
+`fitAddon.fit()` call, then whatever `ResizeObserver` reported once layout truly settled) — under
+more load (a second window/renderer competing for layout time), those two measurements more often
+disagreed, causing a genuine resize moments after spawn, which ConPTY/PSReadLine correctly respond
+to by redrawing the prompt. Fixed by removing the second measurement entirely: the terminal now
+spawns on the *first* `ResizeObserver` callback itself, so there is only ever one size measurement
+and no opportunity for it to disagree with itself. Verified clean under the worst case tested —
+two project windows opened in quick succession — and confirmed the restore-both-windows path also
+renders cleanly.
+
+**Diagnostic note for future sessions:** `Get-Process`'s `MainWindowTitle`/`MainWindowHandle`
+properties only report *one* window per OS process — they are not reliable for checking "how many
+windows does this app have open," since Electron can (and does, launcher + project windows) own
+multiple top-level HWNDs under a single process. Use `EnumWindows` (all visible top-level windows)
+instead when verifying multi-window behavior.
+
+---
+
 ## 6. Remaining follow-up work (tracked, not blocking M1)
 
 - [x] Add `Host shinobi-ts` to `~/.ssh/config` — added, pointed at `100.95.193.115` (the Tailscale IP

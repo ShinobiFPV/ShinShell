@@ -1,57 +1,58 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
-import { IPC, type PtySpawnOptions, type SessionState } from '../shared/ipc'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { IPC, type PtySpawnOptions } from '../shared/ipc'
+import type { ProjectRestoreState } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
-import { loadSession, saveSession } from './sessionStore'
+import { listProjects, getProject, saveProjectRestoreState, createProjectFromFolder } from './projects'
+import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen } from './windows'
 
-function isDev(): boolean {
-  return !app.isPackaged
-}
+// "ShinShell" (not the lowercase package.json name) so userData resolves to
+// %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
+app.setName('ShinShell')
 
-function createWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    show: false,
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false
-    }
+function registerIpc(): void {
+  ipcMain.on(IPC.ptySpawn, (event, opts: PtySpawnOptions) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) spawnPty(win, opts)
   })
-
-  win.once('ready-to-show', () => win.show())
-
-  if (isDev() && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  return win
-}
-
-function registerIpc(win: BrowserWindow): void {
-  ipcMain.on(IPC.ptySpawn, (_event, opts: PtySpawnOptions) => spawnPty(win, opts))
   ipcMain.on(IPC.ptyWrite, (_event, id: string, data: string) => writePty(id, data))
   ipcMain.on(IPC.ptyResize, (_event, id: string, cols: number, rows: number) =>
     resizePty(id, cols, rows)
   )
   ipcMain.on(IPC.ptyKill, (_event, id: string) => killPty(id))
 
-  ipcMain.handle(IPC.sessionLoad, () => loadSession())
-  ipcMain.on(IPC.sessionSave, (_event, state: SessionState) => saveSession(state))
   ipcMain.handle(IPC.systemHomeDir, () => app.getPath('home'))
+
+  ipcMain.handle(IPC.projectsList, () => listProjects())
+  ipcMain.handle(IPC.projectsGet, (_event, id: string) => getProject(id))
+  ipcMain.on(IPC.projectsSaveRestoreState, (_event, id: string, restore: ProjectRestoreState) =>
+    saveProjectRestoreState(id, restore)
+  )
+  ipcMain.handle(IPC.projectsCreateFromFolder, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      properties: ['openDirectory'],
+      title: 'Open Project Folder'
+    }
+    const result = await (win ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options))
+    if (result.canceled || result.filePaths.length === 0) return null
+    // Simple deterministic accent so repeat imports aren't all identical;
+    // full accent-picker UI is a later-milestone concern (§6.2 "create/edit
+    // projects in-app").
+    const palette = ['#33FF66', '#FF8000', '#E10600', '#00B8D9', '#B14EFF', '#FFD400']
+    const accentColor = palette[listProjects().length % palette.length]
+    return createProjectFromFolder(result.filePaths[0], accentColor)
+  })
+
+  ipcMain.on(IPC.windowOpenProject, (_event, id: string) => openProjectWindow(id))
+  ipcMain.on(IPC.windowOpenLauncher, () => createLauncherWindow())
 }
 
 app.whenReady().then(() => {
-  const win = createWindow()
-  registerIpc(win)
+  registerIpc()
+  restoreWindows()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (!anyWindowOpen()) restoreWindows()
   })
 })
 

@@ -15,6 +15,7 @@ body,
 }
 
 .app {
+  --accent: #3a6df0;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -58,6 +59,7 @@ body,
   background: #0c0c0c;
   color: #fff;
   border-color: #2e2e2e;
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 .tab-close {
@@ -134,7 +136,7 @@ body,
 }
 
 .divider:hover {
-  background: #3a6df0;
+  background: var(--accent);
 }
 
 .pane-leaf {
@@ -147,7 +149,7 @@ body,
 }
 
 .pane-leaf.active {
-  border-color: #3a6df0;
+  border-color: var(--accent);
 }
 
 .terminal-pane {
@@ -155,4 +157,96 @@ body,
   min-width: 0;
   min-height: 0;
   padding: 4px;
+}
+
+/* Launcher */
+.launcher {
+  height: 100%;
+  overflow-y: auto;
+  padding: 32px;
+  -webkit-app-region: drag;
+}
+
+.launcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.launcher-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.btn-primary {
+  background: #2e5fe0;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.btn-primary:hover {
+  background: #3a6df0;
+}
+
+.launcher-loading,
+.launcher-empty {
+  color: #888;
+  font-size: 13px;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: #161616;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  -webkit-app-region: no-drag;
+}
+
+.project-card:hover {
+  border-color: #3a3a3a;
+  background: #1a1a1a;
+}
+
+.project-card-accent {
+  height: 6px;
+}
+
+.project-card-body {
+  padding: 14px 16px;
+}
+
+.project-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.project-card-dir {
+  font-size: 11px;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
