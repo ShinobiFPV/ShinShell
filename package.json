@@ -12,7 +12,7 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-vite build && electron-builder --dir",
-    "release": "electron-vite build && electron-builder"
+    "release": "electron-vite build && electron-builder --publish never"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
