@@ -6,5 +6,6 @@ release/
 *.log
 *.tsbuildinfo
 .DS_Store
+client_secret_*.json
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
