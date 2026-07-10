@@ -387,6 +387,13 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - [x] Rename a project's folder while its window is open → existing terminal(s) keep running untouched; attempting a new tab is blocked with a toast pointing at Edit project details, surfacing on the next window focus (no polling)
 - [x] A bad/missing workingDir never throws past pty spawn, background commands, or watch-sync start — verified via the above (no crash, just a graceful block + log line)
 
+### GitHub Releases distribution + update check
+
+- [x] Tagging `v*` and pushing produces a published GitHub Release with exactly three assets — `ShinShell-Setup-<version>.exe`, `.exe.blockmap`, `latest.yml` — via `.github/workflows/release.yml` alone, no hand-uploaded installer
+- [x] A packaged build finds a newer published release on startup (10s delay), prompts "Update now / Remind me next launch" with real release notes, and the manual "Check for updates" command palette entry gives feedback either way (up to date / error) while the automatic check stays silent on both
+- [x] "Update now" downloads with taskbar progress and installs silently, then **relaunches elevated with zero UAC prompt** — verified live end-to-end (real tag → real Release → real install → real self-update → High integrity, `Task To Run` still correct) after finding and fixing two real bugs in the process: electron-builder's own post-install launch silently drops elevation (worked around by relaunching via `schtasks /run` instead), and the obvious "does the scheduled task already exist" signal for detecting a reinstall is always false in practice because the assisted NSIS installer deletes the task moments earlier during its own silent uninstall-previous-version step (fixed by keying off `%APPDATA%\ShinShell\app-state.json` instead)
+- [x] Dev builds (`app.isPackaged` false) never touch the updater at all
+
 ## House rules (for Claude Code)
 
 - Ask before adding dependencies beyond the architecture table.
