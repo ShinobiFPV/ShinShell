@@ -1,13 +1,13 @@
 # ShinShell — Phase 0 Discovery
 
 Read-only inventory of `imq2`, `shinlink-os`, and `AC1Companion` (siblings under
-`C:\Users\billk\Projects\ShinTech\`), performed per SHINSHELL_SPEC.md §2. No sibling repo's working
+`C:\Users\<you>\Projects\ShinTech\`), performed per SHINSHELL_SPEC.md §2. No sibling repo's working
 tree was modified during discovery itself; two small follow-up commits in `shinlink-os` were
-separately approved by William and are tracked in §5. All paths/commands below are quoted from the
+separately approved by the developer and are tracked in §5. All paths/commands below are quoted from the
 actual files, not paraphrased from the spec's assumptions — several of the spec's placeholder
 assumptions turned out to be wrong or incomplete (noted inline).
 
-**Status: RESOLVED 2026-07-09 — William signed off, proceeding to M1.**
+**Status: RESOLVED 2026-07-09 — the developer signed off, proceeding to M1.**
 
 ---
 
@@ -34,14 +34,14 @@ assumptions turned out to be wrong or incomplete (noted inline).
 - Only UDP 8000/8001 were expected as "telemetry" ports; there are 4 (8000–8003) plus ~15 more across all three projects, now 4 with AC1Companion's port 3000 added.
 - No Pi Zero 2W unit or "ShinPod" (`192.168.1.183`) appears in any of the three repos — ShinPod is a separate standalone project outside this workspace (§4.9).
 - **None of the primary desktop/GUI apps run under systemd** except AC1Companion's backend (Q2 uses tmux; ShinLink OS ground station is a manually-launched GUI) — the log-tail feature (§6.6) needs a `tail -f` SSH fallback, not just `journalctl -fu`, for imq2 and shinlink-os. AC1Companion is the one project where `journalctl -u ac-companion -f` works as originally spec'd.
-- **PowerShell 7 (`pwsh.exe`) is not installed on this machine at all** (`C:\Program Files\PowerShell` doesn't exist). William's actual shell is Windows PowerShell 5.1, with Oh-My-Posh/PSReadLine/Terminal-Icons configured in `C:\Users\billk\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`. See §5.
+- **PowerShell 7 (`pwsh.exe`) is not installed on this machine at all** (`C:\Program Files\PowerShell` doesn't exist). The actual shell in use is Windows PowerShell 5.1, with Oh-My-Posh/PSReadLine/Terminal-Icons configured in `C:\Users\<you>\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`. See §5.
 
 ---
 
 ## 2. Finalized default project configs (§7 schema)
 
-Shell default corrected to `powershell.exe` (William's decision, §5.5). Accent colors, ports, and
-commands below reflect William's resolutions.
+Shell default corrected to `powershell.exe` (the developer's decision, §5.5). Accent colors, ports, and
+commands below reflect the developer's resolutions.
 
 ### `imq2.json`
 
@@ -50,7 +50,7 @@ commands below reflect William's resolutions.
   "id": "imq2",
   "name": "IMQ2 / Q2",
   "accentColor": "#33FF66",          // H9000 terminal green — matches Q2's own branding
-  "workingDir": "C:/Users/billk/Projects/ShinTech/imq2",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/imq2",
   "shell": "powershell.exe",
   "env": {},
   "targets": [
@@ -89,7 +89,7 @@ hotkey binder must treat a missing `hotkey` field as "unbound, palette-accessibl
   "id": "shinlink-os",
   "name": "ShinLink OS",
   "accentColor": "#FF8000",          // McLaren papaya — matches ShinLink OS's own UI palette
-  "workingDir": "C:/Users/billk/Projects/ShinTech/shinlink-os",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/shinlink-os",
   "shell": "powershell.exe",
   "env": {},
   "targets": [
@@ -113,15 +113,15 @@ hotkey binder must treat a missing `hotkey` field as "unbound, palette-accessibl
 }
 ```
 
-Note: ShinLink OS's Tailscale target was added for parity — William confirmed "ShinLink deploys away
+Note: ShinLink OS's Tailscale target was added for parity — confirmed "ShinLink deploys away
 from home too," so both projects health-check the LAN IP with Tailscale as secondary, not just imq2.
 No "run" command is included — the ground station always runs locally on the Pi's attached display
 with real GPIO hardware and is never launched remotely (confirmed, §5.10).
 
 ### `ac1companion.json`
 
-Discovered during this pass, not named in the original spec's Phase 0 scope — William approved
-registering it as a third ShinShell project (§5.2). It's also the architecture precedent for
+Discovered during this pass, not named in the original spec's Phase 0 scope — approved as
+a third ShinShell project (§5.2). It's also the architecture precedent for
 ShinShell itself (Electron + React + electron-builder/NSIS + `requestedExecutionLevel:
 requireAdministrator` — confirmed in `package.json`), useful as a live reference during M3.
 
@@ -130,7 +130,7 @@ requireAdministrator` — confirmed in `package.json`), useful as a live referen
   "id": "ac1companion",
   "name": "AC1Companion",
   "accentColor": "#E10600",          // racing red
-  "workingDir": "C:/Users/billk/Projects/ShinTech/AC1Companion",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/AC1Companion",
   "shell": "powershell.exe",
   "env": {},
   "targets": [
@@ -198,9 +198,9 @@ the 8000 conflict in the first place.
 
 ---
 
-## 5. Resolutions (William, 2026-07-09)
+## 5. Resolutions (2026-07-09)
 
-1. **Dev root:** canonical root is `C:\Users\billk\Projects\ShinTech\` — ShinShell registers against
+1. **Dev root:** canonical root is `C:\Users\<you>\Projects\ShinTech\` — ShinShell registers against
    that. `imq2/README.md`'s stale path predates the ShinTech reorg; fixed separately, out of scope here.
 2. **Pre-registered projects:** all three — imq2, shinlink-os, AC1Companion.
 3. **Accent colors:** imq2 `#33FF66`, shinlink-os `#FF8000`, AC1Companion `#E10600` — chosen for
@@ -210,18 +210,18 @@ the 8000 conflict in the first place.
    checks) were flagged as missing.
 5. **PowerShell / Oh-My-Posh:** **PowerShell 7 is not installed on this machine** — confirmed via
    `Get-Command pwsh` (empty) and `Test-Path "C:\Program Files\PowerShell\7\pwsh.exe"` (`False`).
-   William chose to build against what's actually installed rather than requiring a PS7 install
+   The call was to build against what's actually installed rather than requiring a PS7 install
    first: **default shell is `powershell.exe`** (Windows PowerShell 5.1), not `pwsh.exe` as the spec
    assumed. Confirmed present:
-   - Profile: `C:\Users\billk\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`
-   - Oh-My-Posh: `C:\Users\billk\AppData\Local\Microsoft\WindowsApps\oh-my-posh.exe`, theme
+   - Profile: `C:\Users\<you>\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`
+   - Oh-My-Posh: `C:\Users\<you>\AppData\Local\Microsoft\WindowsApps\oh-my-posh.exe`, theme
      `paradox.omp.json` at `$env:USERPROFILE\oh-my-posh-themes\paradox.omp.json` (file exists)
    - Also configured: PSReadLine (`PredictionSource History`, `PredictionViewStyle ListView`, Tab →
      `MenuComplete`), `Terminal-Icons` module
    - **Implication for M1:** node-pty must spawn `powershell.exe`, not `pwsh.exe`; the acceptance
      test in §10 of the spec ("Oh-My-Posh prompt renders identically to standalone pwsh") should be
      read as "...identically to a standalone Windows PowerShell 5.1 window."
-6. **Claude sign-in:** not yet confirmed by William (Google OAuth vs. email) — build the Chrome
+6. **Claude sign-in:** not yet confirmed (Google OAuth vs. email) — build the Chrome
    user-agent override regardless; harmless if unneeded. Still open, does not block M1.
 7. **SSH resolution:** standardize on aliases. `~/.ssh/config` **already has** a correct entry:
    ```
@@ -234,7 +234,7 @@ the 8000 conflict in the first place.
    ```
    Still needed: a `Host shinobi-ts` entry for the Tailscale hostname (tracked as a follow-up task,
    §6). `shinlink-os/deploy.ps1` is being patched to use the `shinobi` alias instead of the hardcoded
-   IP (small separate commit in that repo, approved). Pi user is `shinobi`, not `billk` — corrects an
+   IP (small separate commit in that repo, approved). Pi user is `shinobi`, not the Windows login — corrects an
    assumption embedded in the original spec brief.
 8. **Port 8000 collision:** treated as a real conflict regardless of simultaneous-use status.
    shinlink-os's Watchtower APRS/Direwolf feed moves to **8010**, leaving 8000–8003 as imq2's
@@ -471,8 +471,8 @@ consistent with the rest of the app's plain-button UI.
 **Verified end-to-end, not just built:** all 5 tab kinds were exercised in the actual running app.
 Claude chat loads the real claude.ai sign-in page with a working "Continue with Google" button
 visible (confirms the UA override defeats Electron's default-UA rejection — did not complete the
-actual OAuth flow, since that would sign in with a real account and is Willem's to do, not mine to
-trigger during verification). The claude-code preset launched an actual working Claude Code session
+actual OAuth flow, since that would sign in with a real account and isn't verification's to
+trigger). The claude-code preset launched an actual working Claude Code session
 (v2.1.205, Sonnet 5, correct project working directory) — confirming the initial-command mechanism
 fires correctly for this tab kind too. Monaco loads and renders correctly with no CDN/worker errors.
 Save dialog opens correctly (confirmed via Cancel — didn't type a filename to complete the save,
@@ -533,7 +533,7 @@ etc.) with accurate PIDs. **Deliberately not exercised**: actually clicking a De
 trigger a real deployment to shinobi) or a Kill button on a real system process (`svchost` etc. are
 not something to kill as a side effect of UI testing) — both render correctly and their underlying
 mechanisms (one-shot pty spawn, `taskkill`) are simple enough to be low-risk, but actually triggering
-either belongs to William, not to verification.
+either is a deliberate human action, not something to fire off during verification.
 
 ---
 

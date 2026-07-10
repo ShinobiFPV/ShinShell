@@ -2,7 +2,7 @@
   "id": "ac1companion",
   "name": "AC1Companion",
   "accentColor": "#E10600",
-  "workingDir": "C:/Users/billk/Projects/ShinTech/AC1Companion",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/AC1Companion",
   "shell": "powershell.exe",
   "env": {},
   "targets": [

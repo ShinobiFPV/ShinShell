@@ -2,7 +2,7 @@
 
 **One elevated window to rule them all.**
 
-ShinShell exists because William once had six PowerShell windows open, all of them
+ShinShell exists because I once had six PowerShell windows open, all of them
 titled "Windows PowerShell," and confidently piped a deploy command into the wrong
 one. If you have ever restarted the wrong service, `git push`ed from the wrong repo,
 or watched a command execute in a terminal you *swore* was pointed at the Pi —
@@ -13,13 +13,13 @@ PowerShell terminals, Claude chat, an editor, and one-keystroke deploys to the P
 into **color-coded project windows** so you always, *always* know which project
 you're about to break.
 
-- **Dev machine:** ScarlettWitch (Windows 11 Pro, user `billk`)
+- **Dev machine:** Windows 11 Pro
 - **Prime deploy target:** shinobi, a Raspberry Pi 5 that has seen things
-- **Dev root:** `C:\Users\billk\Projects\ShinTech\`
+- **Dev root:** a local `ShinTech\` folder with sibling repos (`imq2/`, `shinlink-os/`, `AC1Companion/`)
 - **Status:** Phase 0 (discovery) complete ✅ — building toward M1
 
 > **For Claude Code:** this file is the authoritative brief. `docs/DISCOVERY.md`
-> holds the Phase 0 inventory and William's resolved answers. Sibling repos are
+> holds the Phase 0 inventory and its resolved answers. Sibling repos are
 > reference-only — look, don't touch.
 
 ---
@@ -178,7 +178,7 @@ not vibes). The shape:
   "id": "imq2",
   "name": "IMQ2 / Q2",
   "accentColor": "#33FF66",
-  "workingDir": "C:/Users/billk/Projects/ShinTech/imq2",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/imq2",
   "shell": "pwsh.exe",
   "env": {},
   "targets": [
@@ -221,8 +221,8 @@ already has, and never resurrects a command the user deleted.
 **SSH convention (decided in Phase 0):** aliases everywhere. `~/.ssh/config`
 defines `Host shinobi` (LAN) and `Host shinobi-ts` (Tailscale); ShinShell
 configs and both projects' `deploy.ps1` reference the alias. Hardcoded IPs are
-how you end up deploying to a router. Note the Pi user is `shinobi`, not `billk`
-— the machines have callsigns too.
+how you end up deploying to a router. Note the Pi user is `shinobi`, not your
+Windows login — the machines have callsigns too.
 
 ---
 
@@ -405,4 +405,4 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - Windows-only. Every hour spent on cross-platform abstraction is an hour the
   deploy button doesn't exist.
 - When unsure how something actually works, check the sibling repos first,
-  then ask William. The repos remember; humans improvise.
+  then ask before proceeding. The repos remember; humans improvise.

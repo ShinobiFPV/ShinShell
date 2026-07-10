@@ -2,7 +2,7 @@
   "id": "shinlink-os",
   "name": "ShinLink OS",
   "accentColor": "#FF8000",
-  "workingDir": "C:/Users/billk/Projects/ShinTech/shinlink-os",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/shinlink-os",
   "shell": "powershell.exe",
   "env": {},
   "targets": [

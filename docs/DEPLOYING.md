@@ -1,4 +1,4 @@
-# Deploying (rebuild + reinstall on ScarlettWitch)
+# Deploying (rebuild + reinstall)
 
 Crib sheet, not a manual. If you're doing anything more exotic than "ship the
 latest commit to the machine that's already running ShinShell," you're on

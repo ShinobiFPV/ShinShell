@@ -1,15 +1,15 @@
 # ShinShell — Project Specification & Build Brief
 
 **Working title:** ShinShell (rename freely)
-**Client:** William ("shinobi") / ShinTech Electronics
-**Dev machine:** ScarlettWitch — Windows 11 Pro, user `billk`
+**Client:** "shinobi" / ShinTech Electronics
+**Dev machine:** Windows 11 Pro
 **This document is the authoritative brief for Claude Code. Read it fully before writing any code. Do NOT skip Phase 0.**
 
 ---
 
 ## 1. Vision
 
-A single, always-elevated Windows desktop app that consolidates William's entire dev
+A single, always-elevated Windows desktop app that consolidates an entire dev
 pipeline into one tabbed, multi-window workspace:
 
 - **PowerShell terminals** (real pwsh, Oh-My-Posh intact) — multiple per project
@@ -21,8 +21,8 @@ Each open **project lives in its own color-coded window** with its own tab set.
 The app launches from the desktop/taskbar **with zero UAC prompts** and every
 terminal it spawns is already Administrator.
 
-Primary use case: William develops on Windows with Claude Code and constantly
-pushes code over SSH to a Pi 5 (`billk@192.168.1.203`, hostname `shinobi`) and
+Primary use case: developing on Windows with Claude Code and constantly
+pushing code over SSH to a Pi 5 (hostname `shinobi`, at 192.168.1.203) and
 other devices (Pi Zero 2W units, an original Pi 1 "ShinPod" at 192.168.1.183).
 The app should make that loop nearly frictionless.
 
@@ -33,10 +33,10 @@ The app should make that loop nearly frictionless.
 This spec was written before inspecting the existing projects. Your first job is
 to **scope the real requirements from the codebases sitting next to this one.**
 
-This project folder is intended to live as a sibling of William's other projects
-under his dev root. You should have been launched with access to those siblings
+This project folder is intended to live as a sibling of the other projects under
+the shared dev root. You should have been launched with access to those siblings
 (via `--add-dir` or by starting from the dev root). If you cannot see sibling
-project directories, STOP and ask William to relaunch with access before proceeding.
+project directories, STOP and ask to be relaunched with access before proceeding.
 
 ### 2.1 Inventory the sibling projects
 
@@ -53,7 +53,7 @@ Scan sibling directories for (read-only — do not modify them):
    systemd unit names, tkinter apps, `ac_bridge.py`, Flask bridges, etc.).
 4. **Ports in active use** — Known so far: UDP 8000/8001 (telemetry), 8095
    (ShinLink bridge). Find the rest. These feed the port-manager feature (§6.8).
-5. **Existing CLAUDE.md files** — Note conventions William already uses with
+5. **Existing CLAUDE.md files** — Note conventions already in use with
    Claude Code per project.
 6. **Log locations** — journald unit names, log files, or stdout patterns per
    project, for the log-tail feature (§6.6).
@@ -65,15 +65,15 @@ Write `docs/DISCOVERY.md` in THIS project containing:
 - A table of projects → deploy command(s) → target host(s) → run command(s) → ports
 - A proposed set of **default project configs** (§7 schema) pre-filled from findings
 - A proposed set of **default hotkey commands** per project (§8)
-- Open questions for William
+- Open questions for the project owner
 
-### 2.3 Interview William
+### 2.3 Interview the project owner
 
-Before Milestone 1, confirm with him:
+Before Milestone 1, confirm:
 
 - Dev root path and which projects to pre-register
 - Preferred accent color per project
-- His actual most-typed commands (validate your extraction)
+- Actual most-typed commands (validate the extraction)
 - PowerShell 7 path (`pwsh.exe`) and Oh-My-Posh theme/profile location
 - Whether Claude sign-in is via Google (affects §6.3 user-agent handling)
 
@@ -85,7 +85,7 @@ Only then start building.
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Shell | **Electron + React + TypeScript** | Matches William's existing stack (AC server manager); fastest path |
+| Shell | **Electron + React + TypeScript** | Matches the existing stack (AC server manager); fastest path |
 | Terminal | **xterm.js + node-pty** | Same combo as VS Code; ConPTY → real pwsh → Oh-My-Posh renders natively |
 | Browser tab | **WebContentsView** | Embedded claude.ai with persistent session partition |
 | Editor | **Monaco** | Full VS Code editor component; replaces "notepad" requirement outright |
@@ -180,7 +180,7 @@ resize events (fit addon), and use xterm.js WebGL renderer for performance.
     commands, tab actions, and project switching.
 12. **6.12 Git status in tab strip:** branch name + dirty indicator per project.
 13. **6.13 Theming:** dark default; ShinTech/H9000 Terminal aesthetic is
-    encouraged (William's brand — see the IMQ2 manual styling for reference)
+    encouraged (the house brand — see the IMQ2 manual styling for reference)
     but keep it readable and fast.
 
 Explicit non-goals for v1: SSH terminal multiplexing UI (just spawn `ssh` in a
@@ -205,7 +205,7 @@ One JSON per project in `%APPDATA%/ShinShell/projects/`:
       "id": "shinobi",
       "label": "Pi 5 (shinobi)",
       "host": "192.168.1.203",
-      "user": "billk",
+      "user": "<your-username>",
       "port": 22,
       "healthCheck": true
     }
@@ -266,7 +266,7 @@ OR execute in a new tab, per the command's `runIn`.
 Build and verify in this order; each milestone should run end-to-end before
 starting the next. Commit per milestone.
 
-- **M0 — Discovery:** §2 complete, `docs/DISCOVERY.md` written, William signed off.
+- **M0 — Discovery:** §2 complete, `docs/DISCOVERY.md` written, signed off.
 - **M1 — Terminal core:** Electron shell, one window, xterm.js + node-pty tabs,
   Oh-My-Posh confirmed rendering correctly, splits, session restore for terminals.
 - **M2 — Projects & windows:** config schema, launcher window, per-project
@@ -301,4 +301,4 @@ starting the next. Commit per milestone.
   (keys already deployed to shinobi) — do not implement password storage.
 - Windows is the only target; don't spend effort on cross-platform abstractions.
 - When uncertain about a workflow detail, check the sibling projects first,
-  then ask William.
+  then ask before proceeding.

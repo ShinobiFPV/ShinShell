@@ -2,7 +2,7 @@
   "id": "imq2",
   "name": "IMQ2 / Q2",
   "accentColor": "#33FF66",
-  "workingDir": "C:/Users/billk/Projects/ShinTech/imq2",
+  "workingDir": "C:/Users/YOUR_USERNAME/Projects/ShinTech/imq2",
   "shell": "powershell.exe",
   "env": {},
   "targets": [
