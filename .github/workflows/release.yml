@@ -24,6 +24,13 @@ jobs:
         with:
           node-version: 22
 
+      # node-gyp's bundled gyp still imports distutils, which Python 3.12+
+      # dropped from the standard library — pin 3.11 so rebuilding node-pty
+      # doesn't die with "ModuleNotFoundError: No module named 'distutils'".
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - run: npm ci
 
       - run: npm run release:publish
