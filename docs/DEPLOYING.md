@@ -26,20 +26,30 @@ exe path, something's actually wrong — the macro failing silently is not
 supposed to happen, don't just re-register by hand and move on.
 
 **Reinstalling over an existing install auto-relaunches.**
-`build/register-task.ps1` checks whether the `ShinShell` task already
-existed *before* it re-registers it — if so (i.e. this isn't the very
-first install ever), it fires `schtasks /run /tn ShinShell` itself at the
-end, elevated, no UAC prompt. A genuinely fresh install (no prior task)
-does not auto-launch — first run still goes through the desktop/Start Menu
-shortcut like always. This exists because electron-updater's silent
-self-update needs *something* to relaunch the app post-install without
-losing elevation (see the comment on `quitAndInstall` in
-src/main/updater.ts — electron-builder's own "run after install" launches
-at normal, non-elevated integrity even from an elevated silent install,
-which defeats the entire point; verified live, not theoretical). The app is
-single-instance-locked, so if you also run `schtasks /run` by hand right
-after a reinstall, it just focuses the already-relaunched window instead
-of spawning a second copy.
+`build/register-task.ps1` checks whether `%APPDATA%\ShinShell\app-state.json`
+exists — i.e. whether this machine has ever run ShinShell before — and if
+so, fires `schtasks /run /tn ShinShell` itself at the end, elevated, no UAC
+prompt. A genuinely fresh install (no prior app data) does not auto-launch —
+first run still goes through the desktop/Start Menu shortcut like always.
+**That check is deliberately not "does the scheduled task already exist":**
+electron-builder's assisted NSIS installer silently uninstalls the previous
+version (running `customUnInstall` → `unregister-task.ps1`, which deletes
+the task) *before* `customInstall` runs on every reinstall, so the task is
+already gone by the time this script executes regardless of how long the
+machine has been running ShinShell — verified live, that made a
+task-existence check false on every real reinstall, not just fresh ones.
+`%APPDATA%\ShinShell` is never touched by any install step (only by the
+running app), so its presence survives the uninstall-then-reinstall cycle
+and is the signal that's actually reliable.
+
+This exists because electron-updater's silent self-update needs *something*
+to relaunch the app post-install without losing elevation (see the comment
+on `quitAndInstall` in src/main/updater.ts — electron-builder's own "run
+after install" launches at normal, non-elevated integrity even from an
+elevated silent install, which defeats the entire point; verified live, not
+theoretical). The app is single-instance-locked, so if you also run
+`schtasks /run` by hand right after a reinstall, it just focuses the
+already-relaunched window instead of spawning a second copy.
 
 > [!WARNING]
 > **Never pass `/D=` to this installer.** NSIS requires `/D=<dir>` to be the
