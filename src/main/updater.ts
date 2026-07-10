@@ -136,16 +136,21 @@ export function initAutoUpdater(): void {
   autoUpdater.on('update-downloaded', () => {
     setProgressOnAllWindows(-1)
     // The downloaded artifact is the same NSIS installer this app ships —
-    // its customInstall macro (build/installer.nsh) re-registers the
-    // "ShinShell" scheduled task exactly as a fresh install does, so the
-    // zero-UAC launch path survives the update. isSilent=true skips the
-    // wizard; isForceRunAfter=true relaunches when it's done. Since this
-    // app only ever runs elevated (via the scheduled task), the child
-    // installer process inherits that same elevated token — no UAC prompt
-    // mid-update. (A copy launched by double-clicking the exe directly,
-    // bypassing the scheduled task, would already be flagged by the
-    // ADMIN badge/self-repair flow before it ever got here.)
-    autoUpdater.quitAndInstall(true, true)
+    // its customInstall macro re-registers the "ShinShell" scheduled task
+    // exactly as a fresh install does, so the zero-UAC launch path survives
+    // the update. isSilent=true skips the wizard.
+    //
+    // isForceRunAfter is deliberately false: verified live that
+    // electron-builder's own post-install "run after" launches the exe
+    // directly at *normal* integrity even from an elevated silent install
+    // (presumably a deliberate de-elevation for ordinary consumer apps,
+    // not something this app's config exposes a way to override) — that
+    // would silently drop elevation right after every update. Relaunching
+    // is instead build/register-task.ps1's job: it re-runs via
+    // `schtasks /run` (the only launch path that's actually UAC-free) when
+    // it detects the task already existed, i.e. this is a reinstall/update,
+    // not a first-ever install.
+    autoUpdater.quitAndInstall(true, false)
   })
 
   // On app ready + 10s delay — don't compete with window spin-up.

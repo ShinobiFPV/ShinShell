@@ -10,22 +10,36 @@ your own.
 taskkill /F /IM ShinShell.exe                # ignore "not found", that's fine
 
 npm run release                               # electron-vite build + electron-builder NSIS
-                                               # → dist\ShinShell Setup <version>.exe
+                                               # → dist\ShinShell-Setup-<version>.exe
 
 # Run the installer silently. Plain /S — nothing else. See the warning below.
-Start-Process "dist\ShinShell Setup <version>.exe" -ArgumentList '/S' -Wait
+Start-Process "dist\ShinShell-Setup-<version>.exe" -ArgumentList '/S' -Wait
 
 # The installer's customInstall macro re-registers the scheduled task on
 # every install — you shouldn't need to touch it, just verify:
 schtasks /query /tn ShinShell /v /fo list     # Task To Run must be
                                                # C:\Program Files\ShinShell\ShinShell.exe
-
-schtasks /run /tn ShinShell                   # launches elevated, no UAC prompt
 ```
 
 That's the whole happy path. If `Task To Run` doesn't match the installed
 exe path, something's actually wrong — the macro failing silently is not
 supposed to happen, don't just re-register by hand and move on.
+
+**Reinstalling over an existing install auto-relaunches.**
+`build/register-task.ps1` checks whether the `ShinShell` task already
+existed *before* it re-registers it — if so (i.e. this isn't the very
+first install ever), it fires `schtasks /run /tn ShinShell` itself at the
+end, elevated, no UAC prompt. A genuinely fresh install (no prior task)
+does not auto-launch — first run still goes through the desktop/Start Menu
+shortcut like always. This exists because electron-updater's silent
+self-update needs *something* to relaunch the app post-install without
+losing elevation (see the comment on `quitAndInstall` in
+src/main/updater.ts — electron-builder's own "run after install" launches
+at normal, non-elevated integrity even from an elevated silent install,
+which defeats the entire point; verified live, not theoretical). The app is
+single-instance-locked, so if you also run `schtasks /run` by hand right
+after a reinstall, it just focuses the already-relaunched window instead
+of spawning a second copy.
 
 > [!WARNING]
 > **Never pass `/D=` to this installer.** NSIS requires `/D=<dir>` to be the
@@ -65,6 +79,15 @@ That's it. The workflow checks out the tag, `npm ci`, then
 `GH_TOKEN` from the repo's built-in `secrets.GITHUB_TOKEN` — no PAT to
 manage. The installer, `latest.yml`, and the `.blockmap` all land on the
 Release electron-updater's clients poll.
+
+**The release lands as a draft.** That's electron-builder's default for
+`--publish always`, not a bug — it's a deliberate "CI builds it, a human
+reviews and clicks publish" gate. Check the assets on
+[the draft](https://github.com/ShinobiFPV/ShinShell/releases), then
+`gh release edit vX.Y.Z --draft=false` (or the web UI's "Publish release"
+button) to actually make it live. electron-updater's clients only ever see
+published (non-draft) releases — a draft is invisible to the update feed,
+so nothing rolls out until you do this.
 
 Locally, `npm run release` (no `:publish`) still builds the same installer
 into `dist\` without touching GitHub — that's the safe default for

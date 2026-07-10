@@ -18,7 +18,8 @@ import {
   restoreWindows,
   anyWindowOpen,
   watchDisplayChanges,
-  refreshProjectWindowChrome
+  refreshProjectWindowChrome,
+  getLastFocusedProjectWindow
 } from './windows'
 import { isElevated, repairAndRelaunch, ensureScheduledTaskIfElevated } from './elevation'
 import { registerGlobalHotkeys, unregisterGlobalHotkeys } from './globalHotkeys'
@@ -185,30 +186,50 @@ function logInvalidProjectPaths(): void {
   }
 }
 
-app.whenReady().then(() => {
-  registerIpc()
-  warmClaudeChatPartition()
-  watchDisplayChanges()
-  logInvalidProjectPaths()
-  restoreWindows()
-  ensureScheduledTaskIfElevated()
-  registerGlobalHotkeys()
-  initAutoUpdater()
-
-  app.on('activate', () => {
-    if (!anyWindowOpen()) restoreWindows()
+// § single-instance lock — register-task.ps1 can now relaunch the app
+// itself after a reinstall/update (see updater.ts), so a second launch
+// racing the first (two schtasks /run in quick succession, or a stray
+// manual one on top of that) must surface the existing instance instead of
+// spawning a competing one fighting over the same ptys/ports.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const win = getLastFocusedProjectWindow() ?? BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    } else {
+      createLauncherWindow()
+    }
   })
-})
 
-app.on('window-all-closed', () => {
-  killAllPty()
-  if (process.platform !== 'darwin') app.quit()
-})
+  app.whenReady().then(() => {
+    registerIpc()
+    warmClaudeChatPartition()
+    watchDisplayChanges()
+    logInvalidProjectPaths()
+    restoreWindows()
+    ensureScheduledTaskIfElevated()
+    registerGlobalHotkeys()
+    initAutoUpdater()
 
-app.on('will-quit', () => {
-  unregisterGlobalHotkeys()
-})
+    app.on('activate', () => {
+      if (!anyWindowOpen()) restoreWindows()
+    })
+  })
 
-app.on('before-quit', () => {
-  killAllPty()
-})
+  app.on('window-all-closed', () => {
+    killAllPty()
+    if (process.platform !== 'darwin') app.quit()
+  })
+
+  app.on('will-quit', () => {
+    unregisterGlobalHotkeys()
+  })
+
+  app.on('before-quit', () => {
+    killAllPty()
+  })
+}
