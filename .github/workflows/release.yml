@@ -12,17 +12,16 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest
+    # Pinned, not windows-latest: that alias moved to a VS2026 (18.x) image
+    # and node-gyp doesn't recognize that version yet ("Could not find any
+    # Visual Studio installation" rebuilding node-pty — nodejs/node-gyp#3282).
+    # windows-2022 keeps the VS2022 toolchain node-gyp actually understands.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          # Node 20's bundled npm ships a node-gyp too old to find VS2022 on
-          # the windows-latest runner ("Could not find any Visual Studio
-          # installation" rebuilding node-pty) — 22 carries a node-gyp that
-          # detects it fine. Matches what's proven working on the dev
-          # machine (Node 24, same fix, one major newer).
           node-version: 22
 
       - run: npm ci
