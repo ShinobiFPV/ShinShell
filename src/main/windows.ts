@@ -1,16 +1,21 @@
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow, app, screen } from 'electron'
 import { join } from 'path'
 import { getProject, listProjects } from './projects'
 import { createAccentDotIcon } from './icon'
-import { loadAppState, saveAppState } from './appState'
+import { loadAppState, saveAppState, type WindowBounds } from './appState'
 import { killPtysForWindow } from './pty'
 import { destroyClaudeChatViewsForWindow } from './claudeChat'
 import { unsubscribeSshHealth } from './sshHealth'
 import { startWatching, stopWatching } from './watchSync'
+import { IPC } from '../shared/ipc'
 
 const projectWindows = new Map<string, BrowserWindow>()
 let launcherWindow: BrowserWindow | null = null
 let lastFocusedProjectId: string | null = null
+
+const MIN_WINDOW_WIDTH = 640
+const MIN_WINDOW_HEIGHT = 480
+const BOUNDS_SAVE_DEBOUNCE_MS = 500
 
 function isDev(): boolean {
   return !app.isPackaged
@@ -25,13 +30,59 @@ function loadWindow(win: BrowserWindow, search: string): void {
 }
 
 function persistOpenProjects(): void {
-  saveAppState({ openProjectIds: [...projectWindows.keys()] })
+  const state = loadAppState()
+  saveAppState({ ...state, openProjectIds: [...projectWindows.keys()] })
 }
 
-function baseWindowOptions(): Electron.BrowserWindowConstructorOptions {
+/** True if `bounds` overlaps at least one currently-attached display — a
+ *  saved position from a monitor that's since been unplugged (or a laptop
+ *  undocked from an external display) shouldn't strand the window off-screen. */
+function boundsOnAnyDisplay(bounds: WindowBounds): boolean {
+  return screen.getAllDisplays().some((d) => {
+    const db = d.bounds
+    return (
+      bounds.x < db.x + db.width &&
+      bounds.x + bounds.width > db.x &&
+      bounds.y < db.y + db.height &&
+      bounds.y + bounds.height > db.y
+    )
+  })
+}
+
+function savedBoundsFor(key: string): WindowBounds | null {
+  const saved = loadAppState().windowBounds?.[key]
+  return saved && boundsOnAnyDisplay(saved) ? saved : null
+}
+
+/** Debounced save of the window's current position/size, and a re-fit
+ *  broadcast (§ responsive resizing) whenever the window moves — possibly
+ *  onto a monitor with a different DPI scale factor, which a CSS-driven
+ *  ResizeObserver alone won't detect since the container's logical size
+ *  doesn't change. */
+function attachBoundsPersistence(win: BrowserWindow, key: string): void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const save = (): void => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      if (win.isDestroyed()) return
+      const state = loadAppState()
+      saveAppState({ ...state, windowBounds: { ...state.windowBounds, [key]: win.getBounds() } })
+    }, BOUNDS_SAVE_DEBOUNCE_MS)
+  }
+  win.on('resize', save)
+  win.on('move', save)
+  win.on('moved', () => win.webContents.send(IPC.windowDisplayChanged))
+}
+
+function baseWindowOptions(key: string, defaultWidth: number, defaultHeight: number): Electron.BrowserWindowConstructorOptions {
+  const saved = savedBoundsFor(key)
   return {
-    width: 1280,
-    height: 800,
+    width: saved?.width ?? defaultWidth,
+    height: saved?.height ?? defaultHeight,
+    x: saved?.x,
+    y: saved?.y,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -43,13 +94,28 @@ function baseWindowOptions(): Electron.BrowserWindowConstructorOptions {
   }
 }
 
+// Any display changing scale factor (dragging the window between
+// mixed-DPI monitors, or Windows itself changing a display's scaling)
+// re-fits every terminal in every open window so the prompt stays crisp.
+// Electron's `screen` module is only usable after app ready, so this is
+// called from index.ts's app.whenReady() handler rather than at module load.
+export function watchDisplayChanges(): void {
+  screen.on('display-metrics-changed', (_event, _display, changedMetrics) => {
+    if (!changedMetrics.includes('scaleFactorChanged')) return
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(IPC.windowDisplayChanged)
+    }
+  })
+}
+
 export function createLauncherWindow(): BrowserWindow {
   if (launcherWindow && !launcherWindow.isDestroyed()) {
     launcherWindow.focus()
     return launcherWindow
   }
 
-  const win = new BrowserWindow({ ...baseWindowOptions(), width: 900, height: 640 })
+  const win = new BrowserWindow(baseWindowOptions('launcher', 900, 640))
+  attachBoundsPersistence(win, 'launcher')
   win.once('ready-to-show', () => win.show())
   win.on('closed', () => {
     launcherWindow = null
@@ -69,7 +135,8 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
   const config = getProject(projectId)
   if (!config) return null
 
-  const win = new BrowserWindow(baseWindowOptions())
+  const win = new BrowserWindow(baseWindowOptions(projectId, 1280, 800))
+  attachBoundsPersistence(win, projectId)
   win.setTitle(config.name)
   win.setOverlayIcon(createAccentDotIcon(config.accentColor), config.name)
   win.once('ready-to-show', () => win.show())

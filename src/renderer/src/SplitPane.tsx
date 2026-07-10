@@ -2,6 +2,17 @@ import { useRef } from 'react'
 import TerminalPane from './Terminal'
 import type { PaneNode } from './types'
 
+// Approximate xterm cell metrics for the terminal font/size in styles.css
+// (13px Cascadia Mono NF) — SplitPane has no live xterm instance to measure
+// exactly, so this converts the "min 20 cols / 6 rows" spec into a pixel
+// floor for the divider drag. A rough constant is fine here: it only needs
+// to keep a dragged pane from collapsing to something unreadable, not be
+// pixel-exact.
+const MIN_COLS = 20
+const MIN_ROWS = 6
+const CHAR_WIDTH_PX = 8
+const CHAR_HEIGHT_PX = 18
+
 interface SplitPaneProps {
   node: PaneNode
   activePaneId: string
@@ -75,10 +86,15 @@ function SplitContainer({
     const onMove = (moveEvent: MouseEvent): void => {
       if (!dragging.current) return
       const rect = container.getBoundingClientRect()
+      const total = isRow ? rect.width : rect.height
+      const minPx = isRow ? MIN_COLS * CHAR_WIDTH_PX : MIN_ROWS * CHAR_HEIGHT_PX
+      // If the pane is too small for even one side to hold its minimum,
+      // split evenly rather than letting the ratio clamp go negative.
+      const minRatio = total > 0 ? Math.min(0.5, minPx / total) : 0.15
       const ratio = isRow
         ? (moveEvent.clientX - rect.left) / rect.width
         : (moveEvent.clientY - rect.top) / rect.height
-      const clamped = Math.min(0.85, Math.max(0.15, ratio))
+      const clamped = Math.min(1 - minRatio, Math.max(minRatio, ratio))
       onResize(node.id, [clamped * 100, (1 - clamped) * 100])
     }
     const onUp = (): void => {

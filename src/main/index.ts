@@ -3,7 +3,7 @@ import { IPC, type PtySpawnOptions, type BackgroundCommandOptions, type ViewBoun
 import type { ProjectRestoreState } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
 import { listProjects, getProject, saveProjectRestoreState, createProjectFromFolder } from './projects'
-import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen } from './windows'
+import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen, watchDisplayChanges } from './windows'
 import { isElevated, repairAndRelaunch, ensureScheduledTaskIfElevated } from './elevation'
 import { registerGlobalHotkeys, unregisterGlobalHotkeys } from './globalHotkeys'
 import { runBackgroundCommand } from './commands'
@@ -140,6 +140,7 @@ function registerIpc(): void {
 app.whenReady().then(() => {
   registerIpc()
   warmClaudeChatPartition()
+  watchDisplayChanges()
   restoreWindows()
   ensureScheduledTaskIfElevated()
   registerGlobalHotkeys()

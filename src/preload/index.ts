@@ -55,7 +55,16 @@ const api = {
       return () => ipcRenderer.removeListener(IPC.windowNewTerminalTab, listener)
     },
     setProgress: (progress: number | null): void => ipcRenderer.send(IPC.windowSetProgress, progress),
-    flash: (): void => ipcRenderer.send(IPC.windowFlash)
+    flash: (): void => ipcRenderer.send(IPC.windowFlash),
+    // Fired when this window moves (possibly to a different monitor) or any
+    // display's scale factor changes — the signal to re-fit/redraw terminals
+    // since a DPI change doesn't touch container CSS size (see
+    // terminalRegistry.ts).
+    onDisplayChanged: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on(IPC.windowDisplayChanged, listener)
+      return () => ipcRenderer.removeListener(IPC.windowDisplayChanged, listener)
+    }
   },
   commands: {
     runBackground: (opts: BackgroundCommandOptions): void =>

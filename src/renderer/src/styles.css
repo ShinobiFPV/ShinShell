@@ -145,12 +145,52 @@ body::after {
   align-items: center;
   flex: 1;
   min-width: 0;
+  gap: 4px;
+}
+
+/* The scrollable region itself — tabs never wrap to a second row, they
+   scroll horizontally instead, with arrows appearing only on overflow
+   (TabStrip.tsx toggles them from actual scrollWidth/clientWidth). */
+.tab-strip-scroll {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
   gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-app-region: no-drag;
+}
+
+.tab-strip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-scroll-arrow {
+  flex: 0 0 auto;
+  background: #1c1c1c;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 6px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-scroll-arrow:hover {
+  color: #fff;
+  border-color: var(--accent);
 }
 
 .tab {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  min-width: 120px;
+  max-width: 220px;
   gap: 8px;
   padding: 6px 10px;
   border-radius: 6px 6px 0 0;
@@ -161,6 +201,42 @@ body::after {
   -webkit-app-region: no-drag;
   border: 1px solid transparent;
   border-bottom: none;
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* §6.12 — moved out of the top bar and into the tab it describes. */
+.tab-git {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-family: Consolas, monospace;
+  color: #777;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab.active .tab-git {
+  color: #999;
+}
+
+.tab-git-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--h9000-green);
+  flex: 0 0 auto;
+}
+
+.tab-git-dirty .tab-git-dot {
+  background: var(--h9000-amber);
 }
 
 .tab.active {
@@ -192,22 +268,21 @@ body::after {
   opacity: 1;
 }
 
-.tab-new-group {
-  display: flex;
-  gap: 3px;
-  margin: 0 0 4px 6px;
-  -webkit-app-region: no-drag;
-}
-
+/* Single new-terminal button (Ctrl+T does the same thing) — every other tab
+   kind is reachable via the command palette (Ctrl+Shift+P), so the top bar
+   doesn't need eight separate buttons for it. */
 .tab-new {
+  flex: 0 0 auto;
   background: #1c1c1c;
   border: 1px solid #2e2e2e;
   border-radius: 4px;
   color: #999;
   cursor: pointer;
-  font-size: 11px;
-  padding: 4px 7px;
-  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 9px;
+  margin-left: 2px;
+  -webkit-app-region: no-drag;
 }
 
 .tab-new:hover {
@@ -215,11 +290,22 @@ body::after {
   border-color: var(--accent);
 }
 
-/* §UX4 — wraps the tab content so the hotkey sidebar can overlay just this
-   region (not the tab-strip-row above it) without stealing layout space. */
+/* content-area is a flex ROW: the tab content on the left, the hotkey
+   sidebar on the right as a genuine flex sibling — so expanding/pinning the
+   sidebar resizes (not overlays) the content, and every mounted terminal
+   reflows through its own ResizeObserver. */
 .content-area {
   position: relative;
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.tab-content-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
 }
@@ -234,22 +320,34 @@ body::after {
   border-top: 2px solid var(--accent);
 }
 
-/* §UX4 — collapsed hotkey rail: ~40px of glanceable icons, floating over the
-   content area's right edge so the terminal never loses width to it. */
-.hotkey-rail {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+/* §UX4 — the sidebar itself: always a flex sibling (never an overlay), width
+   animates between the 40px collapsed rail and the 280px expanded panel so
+   the slide genuinely resizes the content area next to it. */
+.hotkey-sidebar {
+  flex: 0 0 40px;
   width: 40px;
-  z-index: 90;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  background: #141414;
+  border-left: 1px solid #262626;
+  transition: flex-basis 0.2s ease, width 0.2s ease;
+}
+
+.hotkey-sidebar.expanded {
+  flex-basis: 280px;
+  width: 280px;
+}
+
+/* Collapsed hotkey rail: ~40px of glanceable icons. */
+.hotkey-rail {
+  width: 40px;
+  flex: 0 0 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   padding: 10px 0;
-  background: rgba(20, 20, 20, 0.55);
-  border-left: 1px solid #262626;
   cursor: pointer;
 }
 
@@ -275,19 +373,15 @@ body::after {
 }
 
 /* §UX4 — expanded command list: a click-to-run cheat sheet, same arm rules
-   as the keyboard path (see HotkeySidebar.tsx's onRunCommand). */
+   as the keyboard path (see HotkeySidebar.tsx's onRunCommand). Fixed at the
+   full 280px so it's revealed by the parent .hotkey-sidebar's width
+   transition rather than resizing itself. */
 .hotkey-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
   width: 280px;
-  z-index: 90;
+  flex: 0 0 280px;
   display: flex;
   flex-direction: column;
   background: #141414;
-  border-left: 1px solid var(--accent);
-  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.4);
 }
 
 .hotkey-panel-header {
@@ -1026,30 +1120,6 @@ body::after {
   font-size: 12px;
   padding: 16px;
   text-align: center;
-}
-
-/* Git status indicator (§6.12) */
-.git-status {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-family: Consolas, monospace;
-  color: #999;
-  letter-spacing: 0.02em;
-  -webkit-app-region: no-drag;
-  white-space: nowrap;
-}
-
-.git-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--h9000-green);
-}
-
-.git-status-dirty .git-status-dot {
-  background: var(--h9000-amber);
 }
 
 /* Watch & sync (§6.10) */

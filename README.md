@@ -332,6 +332,17 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - [ ] Ctrl+/ expands the hotkey sidebar to a clickable command list in the project's accent color; clicking into a terminal (or Esc) collapses it again unless pinned
 - [ ] Everything except the Claude tab and remote features works offline
 
+### Layout contract + responsive resizing (layout pass)
+
+- [x] Top bar contains exactly three things — tab strip, SSH health dot, ADMIN badge — nothing else in `.tab-strip-row`'s component tree
+- [x] Tab strip never wraps to a second row; scrolls horizontally with overflow arrows once tabs don't fit, arrows only appear when there's actually overflow
+- [x] Hotkey sidebar is a flex sibling of the tab content, not an overlay: expanding/collapsing/pinning it visibly resizes the content area, and every mounted terminal reflows (confirmed via `pty.resize` firing and the container's measured width changing)
+- [x] Usable at 1080p landscape, 4K landscape, 1080×1920 portrait, and a narrow 800px window — no clipped controls, no overlap, no horizontal scrollbar on the document in portrait
+- [x] Terminal resize is debounced (~50ms) off a ResizeObserver; split-pane dividers clamp to a minimum pane size (~20 cols / 6 rows) instead of an arbitrary ratio
+- [ ] Drag the window between two different-DPI monitors → prompt stays crisp (re-fit + redraw wired to the window's `moved` event and `display-metrics-changed`/scaleFactorChanged; not yet manually verified on real mixed-DPI hardware)
+- [ ] Window position/size persists per window (keyed by project id) and restores on the correct monitor when it's still attached, falling back to a default position when it isn't (implemented; not yet verified across an actual monitor unplug/replug)
+- [x] Minimum window size (640×480) enforced on both the launcher and project windows
+
 ## House rules (for Claude Code)
 
 - Ask before adding dependencies beyond the architecture table.

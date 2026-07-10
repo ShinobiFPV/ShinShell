@@ -20,6 +20,7 @@ export const IPC = {
   windowNewTerminalTab: 'window:newTerminalTab',
   windowSetProgress: 'window:setProgress',
   windowFlash: 'window:flash',
+  windowDisplayChanged: 'window:displayChanged',
   commandsRunBackground: 'commands:runBackground',
   claudeChatCreate: 'claudeChat:create',
   claudeChatSetBounds: 'claudeChat:setBounds',

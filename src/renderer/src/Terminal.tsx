@@ -3,6 +3,9 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { registerTerminalRefit } from './terminalRegistry'
+
+const RESIZE_DEBOUNCE_MS = 50
 
 interface TerminalProps {
   paneId: string
@@ -59,6 +62,15 @@ export default function TerminalPane({
     let spawned = false
     let lastCols = 0
     let lastRows = 0
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+
+    const commitResize = (): void => {
+      fitAddon.fit()
+      if (xterm.cols === lastCols && xterm.rows === lastRows) return
+      lastCols = xterm.cols
+      lastRows = xterm.rows
+      window.shinshell.pty.resize(paneId, xterm.cols, xterm.rows)
+    }
 
     // Spawn on the *first* ResizeObserver callback rather than a separate
     // up-front fitAddon.fit(). Two independent size measurements (an early
@@ -69,10 +81,13 @@ export default function TerminalPane({
     // behavior), which reads as a duplicated prompt right after the shell's
     // first one. Using the observer's own first report for both the spawn
     // size and the resize baseline removes the race by construction: there
-    // is only ever one measurement pathway.
+    // is only ever one measurement pathway. That first callback fires
+    // immediately (spawn shouldn't wait on a debounce); every resize after
+    // it is debounced ~50ms so a drag-resize or a sidebar slide animation
+    // doesn't spam pty.resize on every intermediate frame.
     const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit()
       if (!spawned) {
+        fitAddon.fit()
         spawned = true
         lastCols = xterm.cols
         lastRows = xterm.rows
@@ -96,18 +111,27 @@ export default function TerminalPane({
         if (initialCommand) window.shinshell.pty.write(paneId, `${initialCommand}\r`)
         return
       }
-      if (xterm.cols === lastCols && xterm.rows === lastRows) return
-      lastCols = xterm.cols
-      lastRows = xterm.rows
-      window.shinshell.pty.resize(paneId, xterm.cols, xterm.rows)
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(commitResize, RESIZE_DEBOUNCE_MS)
     })
     resizeObserver.observe(container)
+
+    // A window dragged onto a differently-scaled monitor doesn't change the
+    // container's CSS size, so ResizeObserver never fires — but the canvas
+    // backing store still needs to be re-measured and redrawn at the new
+    // device pixel ratio, or the prompt renders blurry/misaligned.
+    const unregisterRefit = registerTerminalRefit(() => {
+      commitResize()
+      xterm.refresh(0, xterm.rows - 1)
+    })
 
     return () => {
       offData()
       offExit()
       onInput.dispose()
+      if (resizeTimer) clearTimeout(resizeTimer)
       resizeObserver.disconnect()
+      unregisterRefit()
       window.shinshell.pty.kill(paneId)
       xterm.dispose()
     }

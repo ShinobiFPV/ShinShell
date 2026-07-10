@@ -8,7 +8,6 @@ import LogTailTab from './LogTailTab'
 import DeployTab from './DeployTab'
 import PortsTab from './PortsTab'
 import SshHealthLight from './SshHealthLight'
-import GitStatusIndicator from './GitStatusIndicator'
 import CommandPalette, { type PaletteAction } from './CommandPalette'
 import {
   findLeaves,
@@ -27,6 +26,7 @@ import AdminBadge from './AdminBadge'
 import ArmedCommandBanner from './ArmedCommandBanner'
 import Toast, { type ToastMessage } from './Toast'
 import HotkeySidebar from './HotkeySidebar'
+import { refitAllTerminals } from './terminalRegistry'
 
 let idCounter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now()}-${idCounter++}`
@@ -406,6 +406,11 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   // last had focus, sent from the main process.
   useEffect(() => window.shinshell.window.onNewTerminalTab(() => newTab()), [newTab])
 
+  // Responsive resizing — window moved to a different-DPI monitor, or a
+  // display's scale factor changed underneath it (windows.ts). CSS layout
+  // doesn't change size in that case, so terminals need an explicit nudge.
+  useEffect(() => window.shinshell.window.onDisplayChanged(() => refitAllTerminals()), [])
+
   // Refresh the "switch to project" list whenever the palette opens, rather
   // than keeping it live-subscribed the whole time a window is open.
   useEffect(() => {
@@ -518,6 +523,10 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
 
   return (
     <div className="app" style={accentStyle}>
+      {/* Layout contract: this row holds exactly three things — the tab
+          strip, the SSH health dot, and the ADMIN badge. Nothing else gets
+          added here; anything else belongs in a tab, the sidebar, or a
+          tooltip. */}
       <div className="tab-strip-row">
         <TabStrip
           tabs={tabs}
@@ -527,7 +536,6 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           onNewTabKind={newTabOfKind}
           failedTabIds={failedTabIds}
         />
-        <GitStatusIndicator workingDir={config.workingDir} />
         <SshHealthLight projectId={projectId} hasTarget={hasHealthTarget} />
         <AdminBadge />
       </div>
@@ -547,6 +555,72 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
         </div>
       )}
       <div className="content-area">
+        {/* Flex sibling of the sidebar, not a positioning parent for it — so
+            expanding/pinning the sidebar shrinks this and every terminal
+            inside it reflows via its own ResizeObserver (Terminal.tsx). */}
+        <div className="tab-content-wrapper">
+          {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
+              tabs never tears down a live pty, browser session, or editor. */}
+          {tabs.map((t) => {
+            const active = t.id === activeTabId
+            return (
+              <div key={t.id} className="pane-area" style={{ display: active ? 'flex' : 'none' }}>
+                {isTerminalLike(t) ? (
+                  <SplitPane
+                    node={t.root}
+                    activePaneId={active ? t.activePaneId : ''}
+                    shell={config.shell}
+                    env={shellEnv}
+                    initialCommands={initialCommandsRef.current}
+                    onFocusPane={active ? focusPane : () => {}}
+                    onResize={active ? resizeSplit : () => {}}
+                  />
+                ) : t.kind === 'claude-chat' ? (
+                  <ClaudeChatTab tabId={t.id} active={active} />
+                ) : t.kind === 'editor' ? (
+                  <EditorTab
+                    filePath={t.filePath}
+                    active={active}
+                    onFilePathChange={(path) => updateEditorFilePath(t.id, path)}
+                    onDirtyChange={(dirty) => {
+                      if (dirty) dirtyEditorTabsRef.current.add(t.id)
+                      else dirtyEditorTabsRef.current.delete(t.id)
+                    }}
+                  />
+                ) : t.kind === 'scratchpad' ? (
+                  <ScratchpadTab projectId={projectId} active={active} />
+                ) : t.kind === 'deploy' ? (
+                  <DeployTab
+                    projectId={projectId}
+                    config={{ ...config, env: shellEnv }}
+                    active={active}
+                    armed={armed}
+                    requestConfirm={requestConfirm}
+                    onRunStart={handleDeployRunStart}
+                    onRunEnd={handleDeployRunEnd}
+                  />
+                ) : t.kind === 'ports' ? (
+                  <PortsTab projectPorts={config.ports} />
+                ) : (
+                  (() => {
+                    const cmd = config.commands.find((c) => c.id === t.commandId)
+                    if (!cmd) return <div className="app-loading">Command no longer exists in project config.</div>
+                    return (
+                      <LogTailTab
+                        tabId={t.id}
+                        command={substituteVariables(cmd.command, config)}
+                        cwd={config.workingDir}
+                        shell={config.shell}
+                        env={shellEnv}
+                        active={active}
+                      />
+                    )
+                  })()
+                )}
+              </div>
+            )
+          })}
+        </div>
         <HotkeySidebar
           config={config}
           armed={armed}
@@ -556,67 +630,6 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           onToggleExpanded={() => setSidebarExpanded((v) => !v)}
           onTogglePinned={() => setSidebarPinned((v) => !v)}
         />
-        {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
-            tabs never tears down a live pty, browser session, or editor. */}
-        {tabs.map((t) => {
-        const active = t.id === activeTabId
-        return (
-          <div key={t.id} className="pane-area" style={{ display: active ? 'flex' : 'none' }}>
-            {isTerminalLike(t) ? (
-              <SplitPane
-                node={t.root}
-                activePaneId={active ? t.activePaneId : ''}
-                shell={config.shell}
-                env={shellEnv}
-                initialCommands={initialCommandsRef.current}
-                onFocusPane={active ? focusPane : () => {}}
-                onResize={active ? resizeSplit : () => {}}
-              />
-            ) : t.kind === 'claude-chat' ? (
-              <ClaudeChatTab tabId={t.id} active={active} />
-            ) : t.kind === 'editor' ? (
-              <EditorTab
-                filePath={t.filePath}
-                active={active}
-                onFilePathChange={(path) => updateEditorFilePath(t.id, path)}
-                onDirtyChange={(dirty) => {
-                  if (dirty) dirtyEditorTabsRef.current.add(t.id)
-                  else dirtyEditorTabsRef.current.delete(t.id)
-                }}
-              />
-            ) : t.kind === 'scratchpad' ? (
-              <ScratchpadTab projectId={projectId} active={active} />
-            ) : t.kind === 'deploy' ? (
-              <DeployTab
-                projectId={projectId}
-                config={{ ...config, env: shellEnv }}
-                active={active}
-                armed={armed}
-                requestConfirm={requestConfirm}
-                onRunStart={handleDeployRunStart}
-                onRunEnd={handleDeployRunEnd}
-              />
-            ) : t.kind === 'ports' ? (
-              <PortsTab projectPorts={config.ports} />
-            ) : (
-              (() => {
-                const cmd = config.commands.find((c) => c.id === t.commandId)
-                if (!cmd) return <div className="app-loading">Command no longer exists in project config.</div>
-                return (
-                  <LogTailTab
-                    tabId={t.id}
-                    command={substituteVariables(cmd.command, config)}
-                    cwd={config.workingDir}
-                    shell={config.shell}
-                    env={shellEnv}
-                    active={active}
-                  />
-                )
-              })()
-            )}
-          </div>
-        )
-        })}
       </div>
     </div>
   )
