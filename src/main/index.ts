@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
 import QRCode from 'qrcode'
 import {
   IPC,
@@ -54,6 +54,8 @@ import type { DeployRun } from '../shared/ipc'
 import { startRemoteServer, stopRemoteServer, getRemoteStatus, sendTestNotification } from './remote/server'
 import { generatePin, revokeDevice } from './remote/pairing'
 import { loadRemoteState, saveRemoteState } from './remote/state'
+import { installApplicationMenu } from './menu'
+import { loadSettings, saveSettings } from './settings'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
 // %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
@@ -225,6 +227,18 @@ function registerIpc(): void {
     const status = getRemoteStatus()
     return status.url ? QRCode.toDataURL(status.url) : null
   })
+
+  // § clipboard fix — renderer has no direct `electron` access
+  // (contextIsolation), so clipboard reads/writes round-trip through here.
+  ipcMain.handle(IPC.clipboardReadText, () => clipboard.readText())
+  ipcMain.on(IPC.clipboardWriteText, (_event, text: string) => clipboard.writeText(text))
+
+  ipcMain.handle(IPC.settingsGet, () => loadSettings())
+  ipcMain.on(IPC.settingsSetSkipMultilinePasteGuard, (_event, skip: boolean) => {
+    const settings = loadSettings()
+    settings.skipMultilinePasteGuard = skip
+    saveSettings(settings)
+  })
 }
 
 /** § ShinShell Remote — pushed to every open window (the launcher owns the
@@ -272,6 +286,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(() => {
+    installApplicationMenu()
     registerIpc()
     warmClaudeChatPartition()
     watchDisplayChanges()

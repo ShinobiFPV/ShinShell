@@ -62,7 +62,11 @@ export const IPC = {
   remoteSetAllowFullInput: 'remote:setAllowFullInput',
   remoteTestNotification: 'remote:testNotification',
   remoteGetQrDataUrl: 'remote:getQrDataUrl',
-  remoteStatus: 'remote:status'
+  remoteStatus: 'remote:status',
+  clipboardReadText: 'clipboard:readText',
+  clipboardWriteText: 'clipboard:writeText',
+  settingsGet: 'settings:get',
+  settingsSetSkipMultilinePasteGuard: 'settings:setSkipMultilinePasteGuard'
 } as const
 
 export interface PtySpawnOptions {
@@ -182,4 +186,14 @@ export interface RemoteEnableResult {
   ok: boolean
   error?: string
   status: RemoteStatus
+}
+
+/** § clipboard fix — global (not per-project) app settings. Just the one
+ *  field for now; follows appState.ts's file-per-concern convention rather
+ *  than folding into window-restore state. */
+export interface Settings {
+  /** Skips the "Paste N lines?" confirm (§ clipboard fix) — set via the
+   *  paste-confirm overlay's own "Don't ask again" checkbox, not a
+   *  separate settings screen. */
+  skipMultilinePasteGuard: boolean
 }

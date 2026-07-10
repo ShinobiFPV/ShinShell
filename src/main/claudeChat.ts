@@ -1,5 +1,6 @@
 import { WebContentsView, BrowserWindow, session, shell } from 'electron'
 import { IPC, type ViewBounds, type ClaudeChatNavState } from '../shared/ipc'
+import { attachEditContextMenu } from './contextMenu'
 
 // Standard Chrome UA — Electron's default UA includes "Electron/<version>",
 // which Google's OAuth flow rejects outright (§6.3). Version string doesn't
@@ -43,6 +44,7 @@ export function createClaudeChatView(win: BrowserWindow, id: string): void {
     }
   })
   view.webContents.setUserAgent(CHROME_USER_AGENT)
+  attachEditContextMenu(view.webContents)
 
   // External links (anything not claude.ai itself) open in the OS default
   // browser instead of navigating the embedded view (§6.3).

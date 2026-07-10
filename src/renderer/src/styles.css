@@ -555,11 +555,72 @@ body::after {
   border-color: var(--accent);
 }
 
+.terminal-pane-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
 .terminal-pane {
   flex: 1;
   min-width: 0;
   min-height: 0;
   padding: 4px;
+}
+
+/* § clipboard fix — multiline-paste guard, positioned over the terminal
+   pane it was triggered in. */
+.paste-confirm {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: #161616;
+  border: 1px solid #2e2e2e;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  color: #e8e8e8;
+}
+
+.paste-confirm-question {
+  font-weight: 600;
+}
+
+.paste-confirm-skip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #999;
+  font-size: 11px;
+}
+
+.paste-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.paste-confirm-actions button:not(.btn-primary) {
+  background: none;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.paste-confirm-actions button:not(.btn-primary):hover {
+  border-color: var(--accent);
+  color: #fff;
 }
 
 /* Claude chat tab (§6.3) */

@@ -441,6 +441,16 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - [x] "Update now" downloads with taskbar progress and installs silently, then **relaunches elevated with zero UAC prompt** — verified live end-to-end (real tag → real Release → real install → real self-update → High integrity, `Task To Run` still correct) after finding and fixing two real bugs in the process: electron-builder's own post-install launch silently drops elevation (worked around by relaunching via `schtasks /run` instead), and the obvious "does the scheduled task already exist" signal for detecting a reinstall is always false in practice because the assisted NSIS installer deletes the task moments earlier during its own silent uninstall-previous-version step (fixed by keying off `%APPDATA%\ShinShell\app-state.json` instead)
 - [x] Dev builds (`app.isPackaged` false) never touch the updater at all
 
+### Clipboard (copy/paste)
+
+- [ ] Copy text from Notepad (non-elevated) → Ctrl+V into a terminal tab lands correctly; a single-line paste goes through instantly, no prompt
+- [ ] Pasting a clipboard payload with 2+ lines shows an inline "Paste N lines?" confirm over that pane; Cancel does nothing, Paste sends it; the confirm's "Don't ask again" checkbox persists and is honored on the next multiline paste
+- [ ] Right-click in a terminal with no selection pastes; right-click with an active selection copies and clears the selection — no popup menu either way
+- [ ] Ctrl+C with a selection copies (and clears it); Ctrl+C with no selection still interrupts a running command; Ctrl+Shift+C always copies when there's a selection
+- [ ] Ctrl+A inside a live PowerShell prompt still moves the cursor to line start (not swallowed by the app's hidden Edit menu)
+- [ ] Ctrl+V works in the Monaco editor tab, the scratchpad, and plain dialog inputs (e.g. Edit Project Details' Name field)
+- [ ] Right-click in Monaco/the scratchpad still shows Monaco's own native menu (not doubled); right-click in the claude-chat tab shows a Cut/Copy/Paste menu
+
 ## House rules (for Claude Code)
 
 - Ask before adding dependencies beyond the architecture table.

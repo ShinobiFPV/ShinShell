@@ -8,6 +8,7 @@ import { killPtysForWindow } from './pty'
 import { destroyClaudeChatViewsForWindow } from './claudeChat'
 import { unsubscribeSshHealth } from './sshHealth'
 import { startWatching, stopWatching } from './watchSync'
+import { attachEditContextMenu } from './contextMenu'
 import { IPC } from '../shared/ipc'
 import type { ProjectConfig } from '../shared/project'
 
@@ -118,6 +119,7 @@ export function createLauncherWindow(): BrowserWindow {
 
   const win = new BrowserWindow(baseWindowOptions('launcher', 900, 640))
   attachBoundsPersistence(win, 'launcher')
+  attachEditContextMenu(win.webContents)
   win.once('ready-to-show', () => win.show())
   win.on('closed', () => {
     launcherWindow = null
@@ -145,6 +147,7 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
 
   const win = new BrowserWindow(baseWindowOptions(projectId, 1280, 800))
   attachBoundsPersistence(win, projectId)
+  attachEditContextMenu(win.webContents)
   win.setTitle(config.name)
   win.setOverlayIcon(createAccentDotIcon(config.accentColor), config.name)
   win.once('ready-to-show', () => win.show())

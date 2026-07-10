@@ -14,7 +14,8 @@ import {
   type WatchSyncActivityEntry,
   type RemoteStatus,
   type RemoteDevice,
-  type RemoteEnableResult
+  type RemoteEnableResult,
+  type Settings
 } from '../shared/ipc'
 import type {
   ProjectConfig,
@@ -174,6 +175,15 @@ const api = {
       ipcRenderer.on(IPC.remoteStatus, listener)
       return () => ipcRenderer.removeListener(IPC.remoteStatus, listener)
     }
+  },
+  clipboard: {
+    readText: (): Promise<string> => ipcRenderer.invoke(IPC.clipboardReadText),
+    writeText: (text: string): void => ipcRenderer.send(IPC.clipboardWriteText, text)
+  },
+  settings: {
+    get: (): Promise<Settings> => ipcRenderer.invoke(IPC.settingsGet),
+    setSkipMultilinePasteGuard: (skip: boolean): void =>
+      ipcRenderer.send(IPC.settingsSetSkipMultilinePasteGuard, skip)
   }
 }
 

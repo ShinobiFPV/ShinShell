@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { registerTerminalRefit } from './terminalRegistry'
+import PasteConfirm from './PasteConfirm'
 
 const RESIZE_DEBOUNCE_MS = 50
 
@@ -33,6 +34,7 @@ export default function TerminalPane({
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const [pendingPaste, setPendingPaste] = useState<{ text: string; lineCount: number } | null>(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -60,6 +62,65 @@ export default function TerminalPane({
 
     xtermRef.current = xterm
     fitRef.current = fitAddon
+
+    // § clipboard fix — reads the clipboard directly and calls xterm.paste()
+    // itself rather than relying on whatever native paste-routing was
+    // broken before (this works regardless of the exact original cause).
+    const copySelection = (): void => {
+      const text = xterm.getSelection()
+      if (text) window.shinshell.clipboard.writeText(text)
+      xterm.clearSelection()
+    }
+
+    const requestPaste = async (): Promise<void> => {
+      const text = await window.shinshell.clipboard.readText()
+      if (!text) return
+      const lines = text.split(/\r\n|\r|\n/)
+      if (lines.length > 1) {
+        const settings = await window.shinshell.settings.get()
+        if (!settings.skipMultilinePasteGuard) {
+          setPendingPaste({ text, lineCount: lines.length })
+          return
+        }
+      }
+      xterm.paste(text)
+    }
+
+    // Terminal-emulator clipboard semantics (Windows Terminal convention):
+    // Ctrl+V/Ctrl+Shift+V paste; Ctrl+C copies only when there's a
+    // selection (otherwise xterm's own default sends SIGINT, untouched);
+    // Ctrl+Shift+C is an explicit copy-only alias. Every other Ctrl-combo
+    // (A, X, Z, Y, ...) gets its default action neutralized so the app's
+    // hidden Edit-role menu (src/main/menu.ts) can never swallow a
+    // readline/PSReadLine binding (Ctrl+A move-to-start, Ctrl+Z undo, etc.)
+    // — preventDefault() alone doesn't stop xterm's own key processing
+    // (only Chromium's/Electron's default-action dispatch), so `return
+    // true` still lets the real byte reach the pty exactly as before.
+    xterm.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown' || !event.ctrlKey || event.metaKey) return true
+      const key = event.key.toLowerCase()
+
+      if (key === 'v') {
+        event.preventDefault()
+        event.stopPropagation()
+        void requestPaste()
+        return false
+      }
+
+      if (key === 'c') {
+        const hasSelection = xterm.hasSelection()
+        if (event.shiftKey || hasSelection) {
+          event.preventDefault()
+          event.stopPropagation()
+          if (hasSelection) copySelection()
+          return false
+        }
+        return true // no selection, plain Ctrl+C — let SIGINT through
+      }
+
+      event.preventDefault()
+      return true
+    })
 
     let offData = (): void => {}
     let offExit = (): void => {}
@@ -122,6 +183,19 @@ export default function TerminalPane({
     })
     resizeObserver.observe(container)
 
+    // Classic terminal-emulator right-click (Windows Terminal convention):
+    // no popup menu, ever — right-click IS the action. Copy-and-deselect
+    // with an active selection, otherwise paste.
+    const onContextMenu = (event: MouseEvent): void => {
+      event.preventDefault()
+      if (xterm.hasSelection()) {
+        copySelection()
+      } else {
+        void requestPaste()
+      }
+    }
+    container.addEventListener('contextmenu', onContextMenu)
+
     // A window dragged onto a differently-scaled monitor doesn't change the
     // container's CSS size, so ResizeObserver never fires — but the canvas
     // backing store still needs to be re-measured and redrawn at the new
@@ -137,6 +211,7 @@ export default function TerminalPane({
       onInput.dispose()
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeObserver.disconnect()
+      container.removeEventListener('contextmenu', onContextMenu)
       unregisterRefit()
       window.shinshell.pty.kill(paneId)
       xterm.dispose()
@@ -159,5 +234,22 @@ export default function TerminalPane({
     mountedRef.current = true
   }, [active])
 
-  return <div ref={containerRef} className="terminal-pane" />
+  const confirmPaste = (skipNextTime: boolean): void => {
+    if (skipNextTime) window.shinshell.settings.setSkipMultilinePasteGuard(true)
+    if (pendingPaste) xtermRef.current?.paste(pendingPaste.text)
+    setPendingPaste(null)
+  }
+
+  return (
+    <div className="terminal-pane-wrapper">
+      <div ref={containerRef} className="terminal-pane" />
+      {pendingPaste && (
+        <PasteConfirm
+          lineCount={pendingPaste.lineCount}
+          onConfirm={confirmPaste}
+          onCancel={() => setPendingPaste(null)}
+        />
+      )}
+    </div>
+  )
 }
