@@ -1,5 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
-import { IPC, type PtySpawnOptions, type BackgroundCommandOptions, type ViewBounds } from '../shared/ipc'
+import QRCode from 'qrcode'
+import {
+  IPC,
+  type PtySpawnOptions,
+  type BackgroundCommandOptions,
+  type ViewBounds,
+  type RemoteDevice,
+  type RemoteEnableResult
+} from '../shared/ipc'
 import type { ProjectRestoreState, ProjectUpdatePayload } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
 import {
@@ -43,6 +51,9 @@ import { getGitStatus } from './gitStatus'
 import { getActivity, setWatchSyncEnabled } from './watchSync'
 import { initAutoUpdater, checkForUpdates } from './updater'
 import type { DeployRun } from '../shared/ipc'
+import { startRemoteServer, stopRemoteServer, getRemoteStatus, sendTestNotification } from './remote/server'
+import { generatePin, revokeDevice } from './remote/pairing'
+import { loadRemoteState, saveRemoteState } from './remote/state'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
 // %APPDATA%/ShinShell/, matching the path documented in SHINSHELL_SPEC.md §3.
@@ -170,6 +181,61 @@ function registerIpc(): void {
 
   // § update check — the command palette's "Check for updates" entry.
   ipcMain.on(IPC.updaterCheck, () => checkForUpdates(true))
+
+  // § ShinShell Remote
+  ipcMain.handle(IPC.remoteGetStatus, () => getRemoteStatus())
+  ipcMain.handle(IPC.remoteSetEnabled, async (_event, enabled: boolean): Promise<RemoteEnableResult> => {
+    if (enabled) {
+      const result = await startRemoteServer()
+      broadcastRemoteStatus()
+      return { ok: result.ok, error: result.error, status: getRemoteStatus() }
+    }
+    stopRemoteServer()
+    const state = loadRemoteState()
+    state.enabled = false
+    saveRemoteState(state)
+    broadcastRemoteStatus()
+    return { ok: true, status: getRemoteStatus() }
+  })
+  ipcMain.handle(IPC.remoteGeneratePairingPin, () => {
+    generatePin()
+    broadcastRemoteStatus()
+    return getRemoteStatus()
+  })
+  ipcMain.handle(IPC.remoteGetPairedDevices, (): RemoteDevice[] =>
+    loadRemoteState().devices.map((d) => ({
+      id: d.id,
+      name: d.name,
+      pairedAt: d.pairedAt,
+      lastSeenAt: d.lastSeenAt,
+      hasPushSubscription: Boolean(d.pushSubscription)
+    }))
+  )
+  ipcMain.on(IPC.remoteRevokeDevice, (_event, id: string) => {
+    revokeDevice(id)
+    broadcastRemoteStatus()
+  })
+  ipcMain.on(IPC.remoteSetAllowFullInput, (_event, allow: boolean) => {
+    const state = loadRemoteState()
+    state.allowFullTerminalInput = allow
+    saveRemoteState(state)
+  })
+  ipcMain.handle(IPC.remoteTestNotification, () => sendTestNotification())
+  ipcMain.handle(IPC.remoteGetQrDataUrl, async (): Promise<string | null> => {
+    const status = getRemoteStatus()
+    return status.url ? QRCode.toDataURL(status.url) : null
+  })
+}
+
+/** § ShinShell Remote — pushed to every open window (the launcher owns the
+ *  visible badge/settings panel, but a project window's badge — if it ever
+ *  gets one — should stay in sync too) whenever enable state, pairing, or
+ *  device-list changes. */
+function broadcastRemoteStatus(): void {
+  const status = getRemoteStatus()
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.remoteStatus, status)
+  }
 }
 
 // § path validation layer — checked on app launch for every registered
@@ -214,6 +280,7 @@ if (!app.requestSingleInstanceLock()) {
     ensureScheduledTaskIfElevated()
     registerGlobalHotkeys()
     initAutoUpdater()
+    initRemoteServer()
 
     app.on('activate', () => {
       if (!anyWindowOpen()) restoreWindows()
@@ -231,5 +298,20 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => {
     killAllPty()
+    stopRemoteServer()
   })
+}
+
+// § ShinShell Remote — auto-starts only if it was already enabled (the
+// user's own choice persists across restarts, same as every other
+// per-project toggle in this app); a failure here (Tailscale down at
+// launch) is surfaced via RemoteStatus.error, not a crash or a dialog.
+function initRemoteServer(): void {
+  const state = loadRemoteState()
+  if (!state.enabled) return
+  startRemoteServer()
+    .then((result) => {
+      if (!result.ok) console.warn('[remote] failed to auto-start:', result.error)
+    })
+    .finally(broadcastRemoteStatus)
 }

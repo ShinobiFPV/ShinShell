@@ -640,6 +640,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                     initialCommands={initialCommandsRef.current}
                     onFocusPane={active ? focusPane : () => {}}
                     onResize={active ? resizeSplit : () => {}}
+                    tabKind={t.kind}
                   />
                 ) : t.kind === 'claude-chat' ? (
                   <ClaudeChatTab tabId={t.id} active={active} />

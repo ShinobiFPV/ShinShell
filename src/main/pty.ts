@@ -1,6 +1,8 @@
 import * as pty from 'node-pty'
+import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
 import { IPC, type PtyDataEvent, type PtyExitEvent, type PtySpawnOptions } from '../shared/ipc'
+import { onPtyChunk, clearSession as clearWaitState } from './remote/waitDetector'
 
 // Windows PowerShell 5.1 — pwsh.exe (PS7) is not installed on this machine.
 // See docs/DISCOVERY.md §5.5. Spawned with no args so it loads the user's
@@ -9,12 +11,27 @@ import { IPC, type PtyDataEvent, type PtyExitEvent, type PtySpawnOptions } from 
 // override the shell; this is just the fallback.
 const DEFAULT_SHELL = 'powershell.exe'
 
+// § ShinShell Remote — how much recent output a late-joining phone client
+// gets replayed on subscribe. Generous enough for a multi-screen prompt,
+// small enough that a chatty tab doesn't bloat memory per session.
+const SCROLLBACK_CAP = 64 * 1024
+
 interface Session {
   proc: pty.IPty
   windowId: number
+  cwd: string
+  tabKind?: 'terminal' | 'claude-code'
+  scrollback: string
 }
 
 const sessions = new Map<string, Session>()
+
+/** § ShinShell Remote — fan-out for main-process-internal consumers (the
+ *  remote server) that need pty data/exit/state without going through the
+ *  renderer IPC channel. `pty.ts` doesn't know or care whether anything is
+ *  listening; Remote is purely additive. Events: 'data' (PtyDataEvent),
+ *  'exit' (PtyExitEvent). */
+export const ptyEvents = new EventEmitter()
 
 function shellArgs(shell: string, oneShotCommand?: string): string[] {
   if (!oneShotCommand) return [] // interactive shell — normal terminal tabs
@@ -52,20 +69,50 @@ export function spawnPty(win: BrowserWindow, opts: PtySpawnOptions): void {
     return
   }
 
-  sessions.set(opts.id, { proc, windowId: win.id })
+  sessions.set(opts.id, { proc, windowId: win.id, cwd: opts.cwd, tabKind: opts.tabKind, scrollback: '' })
 
   proc.onData((data) => {
-    if (win.isDestroyed()) return
     const payload: PtyDataEvent = { id: opts.id, data }
-    win.webContents.send(IPC.ptyData, payload)
+    if (!win.isDestroyed()) win.webContents.send(IPC.ptyData, payload)
+
+    // § ShinShell Remote — capped scrollback for late-joining clients, plus
+    // a main-process-internal fan-out (independent of the renderer IPC
+    // send above) so the remote server sees the same chunks without
+    // touching the desktop app's own live-stream path.
+    const session = sessions.get(opts.id)
+    if (session) session.scrollback = (session.scrollback + data).slice(-SCROLLBACK_CAP)
+    ptyEvents.emit('data', payload)
+    if (session?.tabKind === 'claude-code') onPtyChunk(opts.id, data)
   })
 
   proc.onExit(({ exitCode }) => {
     sessions.delete(opts.id)
-    if (win.isDestroyed()) return
+    clearWaitState(opts.id)
     const payload: PtyExitEvent = { id: opts.id, exitCode: exitCode ?? 0 }
-    win.webContents.send(IPC.ptyExit, payload)
+    if (!win.isDestroyed()) win.webContents.send(IPC.ptyExit, payload)
+    ptyEvents.emit('exit', payload)
   })
+}
+
+/** § ShinShell Remote — recent output for a session, replayed to a phone
+ *  client the moment it subscribes so the terminal isn't blank until the
+ *  next live chunk arrives. */
+export function getScrollback(id: string): string {
+  return sessions.get(id)?.scrollback ?? ''
+}
+
+/** § ShinShell Remote — which project window a session belongs to and
+ *  whether it's a claude-code pane (gates remote input per §2 of the Remote
+ *  server core: input is claude-code-only unless allowFullTerminalInput). */
+export function getSessionMeta(
+  id: string
+): { windowId: number; cwd: string; tabKind?: 'terminal' | 'claude-code' } | undefined {
+  const session = sessions.get(id)
+  return session && { windowId: session.windowId, cwd: session.cwd, tabKind: session.tabKind }
+}
+
+export function listSessionIds(): string[] {
+  return [...sessions.keys()]
 }
 
 export function writePty(id: string, data: string): void {

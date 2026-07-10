@@ -202,6 +202,24 @@ export function getLastFocusedProjectWindow(): BrowserWindow | null {
   return win && !win.isDestroyed() ? win : null
 }
 
+/** § ShinShell Remote — reverse lookup so a pty session (which only knows
+ *  its owning BrowserWindow's id, per pty.ts's Session) can be attributed
+ *  to a project without new IPC plumbing: one BrowserWindow is always
+ *  exactly one project. */
+export function getProjectIdForWindow(windowId: number): string | undefined {
+  for (const [projectId, win] of projectWindows) {
+    if (win.id === windowId) return projectId
+  }
+  return undefined
+}
+
+/** § ShinShell Remote — GET /api/projects lists exactly the projects that
+ *  currently have an open window, matching the desktop app's own notion of
+ *  "open." */
+export function listOpenProjectIds(): string[] {
+  return [...projectWindows.keys()]
+}
+
 export function getProjectIdByIndex(index: number): string | undefined {
   // 1-based, matches Ctrl+Alt+1..9 (§8) — ordering follows listProjects()'s
   // sort (by name), same order the launcher grid shows them in.

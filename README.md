@@ -167,6 +167,53 @@ macOS/Linux, tray-only mode, settings sync. Scope creep is how apps die young.
 
 ---
 
+## ShinShell Remote
+
+A phone PWA for the one thing that actually needs a phone: noticing that
+Claude Code is sitting at a permission prompt while you're away from the
+desk, and answering it without walking back.
+
+**Off by default.** Enabling it (Launcher → the REMOTE badge) starts a small
+HTTPS+WebSocket server inside ShinShell that binds **only** to this
+machine's Tailscale interface address — never your LAN, never the open
+internet. If Tailscale isn't up, Remote refuses to start rather than
+silently doing something else. HTTPS comes from `tailscale cert`, which
+requires "HTTPS Certificates" turned on for your tailnet in the
+[admin console](https://login.tailscale.com/admin/dns) — see
+docs/DEPLOYING.md if that step is new to you.
+
+**Pairing:** the settings panel shows a QR code (open it on the phone) and,
+on demand, a 6-digit PIN that expires in 5 minutes and locks out after 5
+wrong guesses. The phone submits the PIN once and gets a long-lived device
+token — paired devices are listed (and revocable) in the same panel.
+
+**What it shows:** every open terminal and Claude Code tab, as
+accent-colored chips with a state dot — green pulse for *waiting on you*,
+amber for busy, grey for idle — built from a ~2s-quiet-plus-prompt-pattern
+heuristic (no shell integration required). Tapping a chip opens a
+read-optimized terminal view with a fixed `[Enter][Esc][↑][↓][y][n]` bar
+and a text field for typed replies.
+
+**Input is claude-code-only by default.** A paired phone can answer Claude
+Code prompts, not type into arbitrary terminal tabs — that's a separate,
+explicitly-labeled `allowFullTerminalInput` toggle in settings, because a
+phone driving *any* shell session is a meaningfully bigger blast radius
+than answering a permission prompt.
+
+**Push notifications** fire on the busy/idle → waiting transition (and on
+session end), via a plain outbound call to Apple/Google's push service —
+that part works over any network, not just the tailnet; only *opening* the
+notification needs you back on Tailscale. **iOS note:** Push only works
+from a PWA added to the Home Screen (Share → Add to Home Screen) on iOS
+16.4+ — a normal Safari tab can't subscribe at all.
+
+Everything except the phone itself lives in this repo: the server in
+`src/main/remote/`, the PWA in `/remote` (its own subproject — Preact +
+xterm.js, built separately and served by ShinShell itself, see
+`npm run build:remote`).
+
+---
+
 ## Project config
 
 One JSON per project in `%APPDATA%/ShinShell/projects/`. Real defaults for all

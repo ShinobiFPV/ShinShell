@@ -62,6 +62,45 @@ already-relaunched window instead of spawning a second copy.
 > installer's per-machine default already resolves to
 > `C:\Program Files\ShinShell`, which is where the existing install lives.
 
+## ShinShell Remote — Tailscale HTTPS cert
+
+Remote needs "HTTPS Certificates" turned on for your tailnet — it's a
+one-time, per-tailnet setting, not something ShinShell can toggle for you:
+[admin console → DNS](https://login.tailscale.com/admin/dns) → "HTTPS
+Certificates" → Enable. If it's off, `tailscale cert` fails immediately
+with a clear stderr message the first time Remote tries to start, rather
+than a generic error — check this setting first if that's what you see.
+
+Once enabled, ShinShell handles the rest itself:
+
+```powershell
+# What ShinShell runs internally (src/main/remote/tailscale.ts) — useful to
+# know if you ever need to debug cert issuance by hand:
+tailscale cert --cert-file="$env:APPDATA\ShinShell\certs\<name>.crt" `
+                --key-file="$env:APPDATA\ShinShell\certs\<name>.key" `
+                <magicdns-name>
+```
+
+`<magicdns-name>` is your tailnet's `CertDomains[0]` from
+`tailscale status --json` (e.g. `scarlettwitch.tail9249a1.ts.net`) — the
+pre-cleaned name `tailscale cert` itself expects, not `Self.DNSName`
+(which has a trailing dot).
+
+**Renewal:** `tailscale cert` is cheap and idempotent — re-running it
+returns instantly from local cache if the cert still has enough validity,
+or transparently re-issues near expiry. ShinShell re-runs it once every 24h
+and hot-swaps the live HTTPS server's cert via `setSecureContext()` — no
+rebind, no dropped WebSocket connections. If the machine's Tailscale IP
+itself changes (rare — a device re-registering), that *does* need a real
+rebind, which the same 24h check handles by restarting the listener.
+
+**Alternative — `tailscale serve`:** if you'd rather have Tailscale
+terminate TLS itself and reverse-proxy to a plain-HTTP ShinShell listener
+instead of ShinShell holding the cert directly, `tailscale serve` is the
+documented alternative. ShinShell doesn't do this today (holding its own
+cert keeps the whole HTTPS+WS path in one process, simpler to reason
+about), but nothing here is incompatible with switching later.
+
 ## Secrets
 
 OAuth client secrets (Google, etc.) live in `%APPDATA%\ShinShell\`, never

@@ -1552,3 +1552,172 @@ body::after {
   color: #777;
   cursor: not-allowed;
 }
+
+/* ShinShell Remote — badge (mirrors .admin-badge) + settings panel (reuses
+   .edit-project-dialog's shell, wider for the QR/device list content). */
+.remote-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
+  font-family: inherit;
+  cursor: pointer;
+  background: none;
+}
+
+.remote-badge-off {
+  color: #777;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #2e2e2e;
+}
+
+.remote-badge-off:hover {
+  border-color: #444;
+  color: #999;
+}
+
+.remote-badge-ok {
+  color: var(--h9000-green);
+  background: rgba(0, 220, 120, 0.1);
+  border-color: rgba(0, 220, 120, 0.25);
+}
+
+.remote-badge-warn {
+  color: var(--h9000-red);
+  background: rgba(255, 60, 60, 0.1);
+  border-color: rgba(255, 60, 60, 0.3);
+}
+
+.remote-settings-dialog {
+  width: 560px;
+}
+
+.remote-enable-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.remote-enable-label {
+  font-size: 13px;
+  color: #e8e8e8;
+  font-weight: 600;
+}
+
+.remote-enable-sub {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.remote-pairing-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.remote-qr {
+  width: 120px;
+  height: 120px;
+  border-radius: 6px;
+  border: 1px solid #2e2e2e;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.remote-pairing-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.remote-pairing-instructions p {
+  margin: 0;
+}
+
+.remote-pin {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--h9000-green);
+  margin-top: 4px;
+}
+
+.remote-devices-empty {
+  font-size: 12px;
+  color: #777;
+}
+
+.remote-devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.remote-device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #1c1c1c;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+}
+
+.remote-device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.remote-device-name {
+  font-size: 12px;
+  color: #e8e8e8;
+}
+
+.remote-device-meta {
+  font-size: 10px;
+  color: #777;
+}
+
+.remote-device-revoke {
+  background: none;
+  border: 1px solid #3a2020;
+  color: var(--h9000-red);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.remote-device-revoke:hover {
+  background: rgba(255, 60, 60, 0.1);
+}
+
+.remote-full-input-row {
+  gap: 6px;
+}
+
+.remote-full-input-row span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ccc;
+  font-size: 12px;
+}
+
+.remote-full-input-warning {
+  color: var(--h9000-amber);
+  font-size: 11px;
+  line-height: 1.4;
+}

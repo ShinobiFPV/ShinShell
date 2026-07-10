@@ -21,6 +21,7 @@ interface SplitPaneProps {
   initialCommands: Map<string, string>
   onFocusPane: (paneId: string) => void
   onResize: (splitId: string, sizes: [number, number]) => void
+  tabKind?: 'terminal' | 'claude-code'
 }
 
 export default function SplitPane({
@@ -30,7 +31,8 @@ export default function SplitPane({
   env,
   initialCommands,
   onFocusPane,
-  onResize
+  onResize,
+  tabKind
 }: SplitPaneProps): JSX.Element {
   if (node.type === 'leaf') {
     return (
@@ -45,6 +47,7 @@ export default function SplitPane({
           env={env}
           active={node.id === activePaneId}
           initialCommand={initialCommands.get(node.id)}
+          tabKind={tabKind}
         />
       </div>
     )
@@ -59,6 +62,7 @@ export default function SplitPane({
       initialCommands={initialCommands}
       onFocusPane={onFocusPane}
       onResize={onResize}
+      tabKind={tabKind}
     />
   )
 }
@@ -70,7 +74,8 @@ function SplitContainer({
   env,
   initialCommands,
   onFocusPane,
-  onResize
+  onResize,
+  tabKind
 }: SplitPaneProps & { node: Extract<PaneNode, { type: 'split' }> }): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
@@ -117,6 +122,7 @@ function SplitContainer({
           initialCommands={initialCommands}
           onFocusPane={onFocusPane}
           onResize={onResize}
+          tabKind={tabKind}
         />
       </div>
       <div className={`divider ${isRow ? 'divider-row' : 'divider-col'}`} onMouseDown={onDividerDown} />
@@ -129,6 +135,7 @@ function SplitContainer({
           initialCommands={initialCommands}
           onFocusPane={onFocusPane}
           onResize={onResize}
+          tabKind={tabKind}
         />
       </div>
     </div>

@@ -15,6 +15,10 @@ interface TerminalProps {
   active: boolean
   /** Typed + Enter right after spawn — used for runIn:"new-tab" commands (§7/§8). */
   initialCommand?: string
+  /** 'terminal' | 'claude-code' — passed through to pty.spawn so ShinShell
+   *  Remote can scope its waiting-for-input heuristic and input gating to
+   *  claude-code panes only (§ Remote). */
+  tabKind?: 'terminal' | 'claude-code'
 }
 
 export default function TerminalPane({
@@ -23,7 +27,8 @@ export default function TerminalPane({
   shell,
   env,
   active,
-  initialCommand
+  initialCommand,
+  tabKind
 }: TerminalProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
@@ -98,7 +103,8 @@ export default function TerminalPane({
           cols: xterm.cols,
           rows: xterm.rows,
           shell,
-          env
+          env,
+          tabKind
         })
 
         offData = window.shinshell.pty.onData(({ id, data }) => {

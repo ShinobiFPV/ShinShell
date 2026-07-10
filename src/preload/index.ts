@@ -11,7 +11,10 @@ import {
   type SshHealthStatus,
   type PortEntry,
   type GitStatus,
-  type WatchSyncActivityEntry
+  type WatchSyncActivityEntry,
+  type RemoteStatus,
+  type RemoteDevice,
+  type RemoteEnableResult
 } from '../shared/ipc'
 import type {
   ProjectConfig,
@@ -155,6 +158,22 @@ const api = {
     // 10s-after-launch automatic one does, but interactively (so a
     // no-update-found or error state gets a dialog instead of staying silent).
     check: (): void => ipcRenderer.send(IPC.updaterCheck)
+  },
+  remote: {
+    getStatus: (): Promise<RemoteStatus> => ipcRenderer.invoke(IPC.remoteGetStatus),
+    setEnabled: (enabled: boolean): Promise<RemoteEnableResult> =>
+      ipcRenderer.invoke(IPC.remoteSetEnabled, enabled),
+    generatePairingPin: (): Promise<RemoteStatus> => ipcRenderer.invoke(IPC.remoteGeneratePairingPin),
+    getPairedDevices: (): Promise<RemoteDevice[]> => ipcRenderer.invoke(IPC.remoteGetPairedDevices),
+    revokeDevice: (id: string): void => ipcRenderer.send(IPC.remoteRevokeDevice, id),
+    setAllowFullInput: (allow: boolean): void => ipcRenderer.send(IPC.remoteSetAllowFullInput, allow),
+    testNotification: (): Promise<void> => ipcRenderer.invoke(IPC.remoteTestNotification),
+    getQrDataUrl: (): Promise<string | null> => ipcRenderer.invoke(IPC.remoteGetQrDataUrl),
+    onStatus: (cb: (status: RemoteStatus) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: RemoteStatus): void => cb(payload)
+      ipcRenderer.on(IPC.remoteStatus, listener)
+      return () => ipcRenderer.removeListener(IPC.remoteStatus, listener)
+    }
   }
 }
 

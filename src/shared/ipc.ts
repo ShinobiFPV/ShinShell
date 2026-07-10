@@ -53,7 +53,16 @@ export const IPC = {
   watchSyncSetEnabled: 'watchSync:setEnabled',
   watchSyncGetActivity: 'watchSync:getActivity',
   watchSyncActivity: 'watchSync:activity',
-  updaterCheck: 'updater:check'
+  updaterCheck: 'updater:check',
+  remoteGetStatus: 'remote:getStatus',
+  remoteSetEnabled: 'remote:setEnabled',
+  remoteGeneratePairingPin: 'remote:generatePairingPin',
+  remoteGetPairedDevices: 'remote:getPairedDevices',
+  remoteRevokeDevice: 'remote:revokeDevice',
+  remoteSetAllowFullInput: 'remote:setAllowFullInput',
+  remoteTestNotification: 'remote:testNotification',
+  remoteGetQrDataUrl: 'remote:getQrDataUrl',
+  remoteStatus: 'remote:status'
 } as const
 
 export interface PtySpawnOptions {
@@ -67,6 +76,10 @@ export interface PtySpawnOptions {
    *  so the pty's exit code is the command's own — used by the deploy tab
    *  (§6.7) to record real exit codes in history. */
   oneShotCommand?: string
+  /** 'terminal' | 'claude-code' — tags the session so ShinShell Remote can
+   *  scope its waiting-for-input heuristic and input gating (§ Remote) to
+   *  claude-code panes only. Absent for one-shot (deploy) spawns. */
+  tabKind?: 'terminal' | 'claude-code'
 }
 
 export interface PtyDataEvent {
@@ -136,4 +149,37 @@ export interface WatchSyncActivityEntry {
   changedPath: string
   commandLabel: string
   success: boolean
+}
+
+/** § ShinShell Remote — pushed to the launcher whenever the remote server's
+ *  lifecycle state changes (enabled/disabled, bound address, a new pairing
+ *  PIN, or a start failure) so RemoteBadge/RemoteSettingsPanel stay live
+ *  without polling. */
+export interface RemoteStatus {
+  enabled: boolean
+  running: boolean
+  /** e.g. "https://scarlettwitch.tail9249a1.ts.net:8443" once bound. */
+  url: string | null
+  error: string | null
+  pairedDeviceCount: number
+  /** Set only while a pairing PIN is live (5 min window); cleared on
+   *  success, expiry, or the attempt cap being hit. */
+  pendingPin: string | null
+  /** Off by default — whether remote input is allowed on plain terminal
+   *  tabs, not just claude-code ones. See RemoteSettingsPanel's warning. */
+  allowFullTerminalInput: boolean
+}
+
+export interface RemoteDevice {
+  id: string
+  name?: string
+  pairedAt: number
+  lastSeenAt: number
+  hasPushSubscription: boolean
+}
+
+export interface RemoteEnableResult {
+  ok: boolean
+  error?: string
+  status: RemoteStatus
 }

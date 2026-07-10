@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectConfig, ProjectValidation } from '../../shared/project'
 import AdminBadge from './AdminBadge'
 import EditProjectDialog from './EditProjectDialog'
+import RemoteBadge from './RemoteBadge'
+import RemoteSettingsPanel from './RemoteSettingsPanel'
 
 const FOCUS_REVALIDATE_DEBOUNCE_MS = 300
 
@@ -10,6 +12,7 @@ export default function Launcher(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [pathStatus, setPathStatus] = useState<Record<string, ProjectValidation>>({})
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  const [remoteSettingsOpen, setRemoteSettingsOpen] = useState(false)
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refresh = useCallback(async () => {
@@ -57,6 +60,7 @@ export default function Launcher(): JSX.Element {
         <h1>ShinShell</h1>
         <div className="launcher-header-actions">
           <AdminBadge />
+          <RemoteBadge onClick={() => setRemoteSettingsOpen(true)} />
           <button className="btn-primary" onClick={openFolder}>
             + Open Project
           </button>
@@ -114,6 +118,8 @@ export default function Launcher(): JSX.Element {
           onSaved={() => refresh()}
         />
       )}
+
+      {remoteSettingsOpen && <RemoteSettingsPanel onClose={() => setRemoteSettingsOpen(false)} />}
     </div>
   )
 }
