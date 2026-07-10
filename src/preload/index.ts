@@ -148,6 +148,13 @@ const api = {
       ipcRenderer.on(IPC.watchSyncActivity, listener)
       return () => ipcRenderer.removeListener(IPC.watchSyncActivity, listener)
     }
+  },
+  updater: {
+    // The whole flow (dialog, download progress, quitAndInstall) lives in
+    // main/updater.ts — this just triggers a check the same way the
+    // 10s-after-launch automatic one does, but interactively (so a
+    // no-update-found or error state gets a dialog instead of staying silent).
+    check: (): void => ipcRenderer.send(IPC.updaterCheck)
   }
 }
 

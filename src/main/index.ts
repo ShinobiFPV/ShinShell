@@ -40,6 +40,7 @@ import { subscribeSshHealth, unsubscribeSshHealth } from './sshHealth'
 import { listListeningPorts, killProcess } from './ports'
 import { getGitStatus } from './gitStatus'
 import { getActivity, setWatchSyncEnabled } from './watchSync'
+import { initAutoUpdater, checkForUpdates } from './updater'
 import type { DeployRun } from '../shared/ipc'
 
 // "ShinShell" (not the lowercase package.json name) so userData resolves to
@@ -165,6 +166,9 @@ function registerIpc(): void {
     if (win) setWatchSyncEnabled(win, projectId, enabled)
   })
   ipcMain.handle(IPC.watchSyncGetActivity, (_event, projectId: string) => getActivity(projectId))
+
+  // § update check — the command palette's "Check for updates" entry.
+  ipcMain.on(IPC.updaterCheck, () => checkForUpdates(true))
 }
 
 // § path validation layer — checked on app launch for every registered
@@ -189,6 +193,7 @@ app.whenReady().then(() => {
   restoreWindows()
   ensureScheduledTaskIfElevated()
   registerGlobalHotkeys()
+  initAutoUpdater()
 
   app.on('activate', () => {
     if (!anyWindowOpen()) restoreWindows()

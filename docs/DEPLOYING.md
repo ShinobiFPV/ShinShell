@@ -44,3 +44,51 @@ OAuth client secrets (Google, etc.) live in `%APPDATA%\ShinShell\`, never
 the repo root. `client_secret_*.json` is gitignored — if you find one sitting
 in the working tree, it wandered in by accident and needs to move, not get
 committed.
+
+## Releasing
+
+`.github/workflows/release.yml` publishes a GitHub Release the moment a
+`v*` tag lands on `main` — that's the *only* path. Never hand-upload an
+installer to Releases; if the workflow didn't build it, it doesn't ship.
+
+```powershell
+# 1. Bump the version — package.json's "version" field is the source of truth.
+#    (edit it directly, or `npm version patch|minor|major` which also commits + tags)
+
+# 2. Tag and push
+git tag v0.2.0
+git push --tags
+```
+
+That's it. The workflow checks out the tag, `npm ci`, then
+`npm run release:publish` (`electron-builder --publish always`) with
+`GH_TOKEN` from the repo's built-in `secrets.GITHUB_TOKEN` — no PAT to
+manage. The installer, `latest.yml`, and the `.blockmap` all land on the
+Release electron-updater's clients poll.
+
+Locally, `npm run release` (no `:publish`) still builds the same installer
+into `dist\` without touching GitHub — that's the safe default for
+"just let me test the installer" from docs/DEPLOYING.md's reinstall
+procedure above.
+
+## Unsigned build reality check
+
+We don't code-sign. Two consequences, both fine to live with for now:
+
+- **First-time downloaders see SmartScreen.** "Windows protected your PC" →
+  **More info** → **Run anyway**. This is a one-time-per-machine speed bump
+  on the initial install, not something update checks trigger — silent
+  NSIS updates via `quitAndInstall` don't go through the Explorer
+  double-click path SmartScreen gates.
+- **electron-updater itself doesn't care.** It verifies the downloaded
+  installer's `sha512` against `latest.yml`, not a code-signing cert, so
+  unsigned auto-updates work today with no special config.
+
+> **TODO if a signing cert ever shows up:** electron-updater's Windows
+> differential-update path checks the *publisher name* on old vs. new
+> installer to decide whether a diff patch is safe to apply. Adding signing
+> later means the first signed release must either match whatever
+> publisher name (or lack of one) unsigned builds shipped with, or updates
+> from the last unsigned version will silently fail to apply as a diff
+> (full download still works, but don't assume the diff path "just keeps
+> working" the day signing lands — test one real update through it).

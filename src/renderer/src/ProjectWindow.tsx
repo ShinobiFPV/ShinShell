@@ -502,7 +502,8 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       { id: 'tab-deploy', category: 'Tab', label: 'Open Deploy Tab', run: () => newTabOfKind('deploy') },
       { id: 'tab-ports', category: 'Tab', label: 'Open Ports Panel', run: () => newTabOfKind('ports') },
       { id: 'tab-close', category: 'Tab', label: 'Close Active Tab', run: () => closeActivePane() },
-      { id: 'edit-project', category: 'Project', label: 'Edit project details', run: () => setEditDialogOpen(true) }
+      { id: 'edit-project', category: 'Project', label: 'Edit project details', run: () => setEditDialogOpen(true) },
+      { id: 'check-updates', category: 'App', label: 'Check for updates', run: () => window.shinshell.updater.check() }
     )
     for (const p of otherProjects) {
       actions.push({

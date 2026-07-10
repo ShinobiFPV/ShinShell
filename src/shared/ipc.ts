@@ -52,7 +52,8 @@ export const IPC = {
   gitStatusGet: 'gitStatus:get',
   watchSyncSetEnabled: 'watchSync:setEnabled',
   watchSyncGetActivity: 'watchSync:getActivity',
-  watchSyncActivity: 'watchSync:activity'
+  watchSyncActivity: 'watchSync:activity',
+  updaterCheck: 'updater:check'
 } as const
 
 export interface PtySpawnOptions {

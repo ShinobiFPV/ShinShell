@@ -24,6 +24,17 @@ you're about to break.
 
 ---
 
+## Install
+
+Grab the latest `ShinShell-Setup-<version>.exe` from
+[Releases](https://github.com/ShinobiFPV/ShinShell/releases/latest) and run it.
+We don't code-sign, so the first launch gets a SmartScreen "unrecognized app"
+screen — **More info → Run anyway**. Every launch after that is silent
+(§ Elevation). Already installed? It checks for updates on its own; see
+docs/DEPLOYING.md if you want to force one or ship a new version.
+
+---
+
 ## The pitch
 
 Every open project gets its **own OS window**, tinted with that project's accent
@@ -67,6 +78,7 @@ thesis of this application.
 | File watch | **chokidar** | For watch-and-sync mode |
 | Config | JSON in `%APPDATA%/ShinShell/` | Human-editable, portable |
 | Packaging | **electron-builder** (NSIS) | AC1Companion already proved this pipeline |
+| Updates | **electron-updater** + GitHub Releases | Feed is the `publish` block in `package.json`; NSIS installer replay means `customInstall` (scheduled task) re-registers on update too, not just fresh installs |
 
 Rules of the road: all pty/fs work in the main process, typed IPC channels to the
 renderer, PowerShell 7 (`C:\Program Files\PowerShell\7\pwsh.exe`) as the default
@@ -92,6 +104,11 @@ The trick is a **Windows Scheduled Task**:
 the embedded browser. Also, Windows UIPI blocks drag-and-drop from non-elevated
 Explorer into elevated windows, so there's a proper Open File dialog instead.
 We accept this. We accepted it the fortieth time UAC asked if we were sure.
+
+That inheritance is also what makes silent self-updates work: the app only
+ever runs elevated (via the scheduled task), so the installer
+`quitAndInstall` spawns for an update inherits the same elevated token —
+no UAC prompt mid-update, same as every other launch.
 
 Rebuilding/reinstalling? See docs/DEPLOYING.md.
 

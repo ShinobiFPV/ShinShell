@@ -1,0 +1,27 @@
+name: Release
+
+# Tag-driven only — see docs/DEPLOYING.md "Releasing". Never hand-upload
+# installers; pushing a v* tag is the one and only path to a GitHub Release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # electron-builder needs this to create the release + upload assets
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npm run release:publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
