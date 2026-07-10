@@ -93,6 +93,8 @@ the embedded browser. Also, Windows UIPI blocks drag-and-drop from non-elevated
 Explorer into elevated windows, so there's a proper Open File dialog instead.
 We accept this. We accepted it the fortieth time UAC asked if we were sure.
 
+Rebuilding/reinstalling? See docs/DEPLOYING.md.
+
 ---
 
 ## Features
