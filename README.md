@@ -53,14 +53,6 @@ color, with a matching colored dot on the taskbar icon. Inside each window: tabs
 And the whole app runs **persistently elevated with zero UAC prompts** (§ Elevation),
 because clicking "Yes" forty times a day builds no character whatsoever.
 
-### The projects (and their colors)
-
-| Project | Accent | Why |
-|---|---|---|
-| **imq2 / Q2** | `#33FF66` | H9000 terminal green — Q2's own face |
-| **shinlink-os** | `#FF8000` | McLaren papaya, matching its UI |
-| **AC1Companion** | `#E10600` | Racing red, obviously |
-
 If you're about to type a deploy command and the window chrome is *green*, you're
 talking to Q2. If it's *papaya*, hands off the CRSF hardware. That's the entire
 thesis of this application.
