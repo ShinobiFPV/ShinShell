@@ -479,7 +479,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           setActiveTabId(next.id)
           return prev
         })
-      } else if (e.shiftKey && e.key === '\\') {
+      } else if (e.shiftKey && e.code === 'Backslash') {
         e.preventDefault()
         splitActivePane('vertical')
       } else if (e.key === '\\') {

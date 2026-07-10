@@ -19,14 +19,35 @@ export function parseHotkey(hotkey: string): ParsedHotkey {
   }
 }
 
+// KeyboardEvent.key reflects the *produced character*, which shifts under
+// Shift (Shift+9 → "(", not "9") — so matching hotkeys against it silently
+// breaks every Ctrl+Shift+<digit> binding. KeyboardEvent.code is the
+// physical key regardless of modifiers/layout; map the hotkey's trailing
+// token to its code and match on that instead.
+function keyToCode(key: string): string | null {
+  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`
+  if (/^[0-9]$/.test(key)) return `Digit${key}`
+  const named: Record<string, string> = {
+    '\\': 'Backslash',
+    '/': 'Slash',
+    '`': 'Backquote',
+    '-': 'Minus',
+    '=': 'Equal',
+    '[': 'BracketLeft',
+    ']': 'BracketRight',
+    ';': 'Semicolon',
+    "'": 'Quote',
+    ',': 'Comma',
+    '.': 'Period'
+  }
+  return named[key] ?? null
+}
+
 export function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
   const parsed = parseHotkey(hotkey)
-  return (
-    e.ctrlKey === parsed.ctrl &&
-    e.shiftKey === parsed.shift &&
-    e.altKey === parsed.alt &&
-    e.key.toLowerCase() === parsed.key
-  )
+  if (e.ctrlKey !== parsed.ctrl || e.shiftKey !== parsed.shift || e.altKey !== parsed.alt) return false
+  const code = keyToCode(parsed.key)
+  return code ? e.code === code : e.key.toLowerCase() === parsed.key
 }
 
 const hotkeyId = (h: ParsedHotkey): string => `${h.ctrl ? 'ctrl+' : ''}${h.shift ? 'shift+' : ''}${h.alt ? 'alt+' : ''}${h.key}`
