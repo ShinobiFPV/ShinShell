@@ -27,13 +27,30 @@ function shellArgs(shell: string, oneShotCommand?: string): string[] {
 
 export function spawnPty(win: BrowserWindow, opts: PtySpawnOptions): void {
   const shell = opts.shell || DEFAULT_SHELL
-  const proc = pty.spawn(shell, shellArgs(shell, opts.oneShotCommand), {
-    name: 'xterm-256color',
-    cols: opts.cols,
-    rows: opts.rows,
-    cwd: opts.cwd,
-    env: { ...process.env, ...opts.env } as Record<string, string>
-  })
+  let proc: pty.IPty
+  try {
+    proc = pty.spawn(shell, shellArgs(shell, opts.oneShotCommand), {
+      name: 'xterm-256color',
+      cols: opts.cols,
+      rows: opts.rows,
+      cwd: opts.cwd,
+      env: { ...process.env, ...opts.env } as Record<string, string>
+    })
+  } catch (err) {
+    // § path validation — the renderer is expected to have already gated
+    // this (no new terminal tabs while a project's workingDir is missing),
+    // but restored tabs from a previous session bypass that gate, and a
+    // race (folder renamed between the check and the click) always exists.
+    // A bad cwd must never crash the main process — report it as an exit
+    // instead so the (already-created) xterm shows "[process exited]"
+    // rather than hanging with a dead pane forever.
+    console.warn(`[pty] spawn failed for cwd "${opts.cwd}": ${err instanceof Error ? err.message : err}`)
+    if (!win.isDestroyed()) {
+      const payload: PtyExitEvent = { id: opts.id, exitCode: -1 }
+      win.webContents.send(IPC.ptyExit, payload)
+    }
+    return
+  }
 
   sessions.set(opts.id, { proc, windowId: win.id })
 

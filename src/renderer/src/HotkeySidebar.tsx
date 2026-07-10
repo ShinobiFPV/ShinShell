@@ -10,6 +10,7 @@ interface HotkeySidebarProps {
   onRunCommand: (cmd: ProjectCommand) => void
   onToggleExpanded: () => void
   onTogglePinned: () => void
+  onEditProject: () => void
 }
 
 // The trailing key of a hotkey string ("Ctrl+Shift+1" → "1") — enough to
@@ -36,7 +37,8 @@ export default function HotkeySidebar({
   pinned,
   onRunCommand,
   onToggleExpanded,
-  onTogglePinned
+  onTogglePinned,
+  onEditProject
 }: HotkeySidebarProps): JSX.Element {
   const hotkeyed = config.commands.filter((c) => c.hotkey)
 
@@ -47,6 +49,16 @@ export default function HotkeySidebar({
           <div className="hotkey-panel-header">
             <span>{config.name} commands</span>
             <div className="hotkey-panel-header-actions">
+              <button
+                className="hotkey-edit"
+                onMouseDown={(e) => {
+                  e.stopPropagation()
+                  onEditProject()
+                }}
+                title="Edit project details"
+              >
+                ⚙
+              </button>
               <button
                 className={`hotkey-pin${pinned ? ' active' : ''}`}
                 onMouseDown={(e) => {

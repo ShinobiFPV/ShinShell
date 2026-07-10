@@ -1,9 +1,25 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { IPC, type PtySpawnOptions, type BackgroundCommandOptions, type ViewBounds } from '../shared/ipc'
-import type { ProjectRestoreState } from '../shared/project'
+import type { ProjectRestoreState, ProjectUpdatePayload } from '../shared/project'
 import { spawnPty, writePty, resizePty, killPty, killAllPty } from './pty'
-import { listProjects, getProject, saveProjectRestoreState, createProjectFromFolder } from './projects'
-import { createLauncherWindow, openProjectWindow, restoreWindows, anyWindowOpen, watchDisplayChanges } from './windows'
+import {
+  listProjects,
+  getProject,
+  saveProjectRestoreState,
+  createProjectFromFolder,
+  validateProject,
+  suggestFixes,
+  updateProject
+} from './projects'
+import { isDirectory } from './projectValidation'
+import {
+  createLauncherWindow,
+  openProjectWindow,
+  restoreWindows,
+  anyWindowOpen,
+  watchDisplayChanges,
+  refreshProjectWindowChrome
+} from './windows'
 import { isElevated, repairAndRelaunch, ensureScheduledTaskIfElevated } from './elevation'
 import { registerGlobalHotkeys, unregisterGlobalHotkeys } from './globalHotkeys'
 import { runBackgroundCommand } from './commands'
@@ -17,7 +33,7 @@ import {
   destroyClaudeChatView,
   warmClaudeChatPartition
 } from './claudeChat'
-import { readFile, writeFile, showOpenFileDialog, showSaveFileDialog } from './files'
+import { readFile, writeFile, showOpenFileDialog, showSaveFileDialog, showOpenFolderDialog } from './files'
 import { loadScratchpad, saveScratchpad } from './scratchpad'
 import { getDeployHistory, appendDeployRun } from './deployHistory'
 import { subscribeSshHealth, unsubscribeSshHealth } from './sshHealth'
@@ -66,6 +82,15 @@ function registerIpc(): void {
     return createProjectFromFolder(result.filePaths[0], accentColor)
   })
 
+  // § path validation + edit-project-details
+  ipcMain.handle(IPC.projectsValidate, (_event, id: string) => validateProject(id))
+  ipcMain.handle(IPC.projectsSuggestFixes, (_event, id: string) => suggestFixes(id))
+  ipcMain.handle(IPC.projectsUpdate, (_event, payload: ProjectUpdatePayload) => {
+    const updated = updateProject(payload)
+    refreshProjectWindowChrome(payload.id, updated)
+    return updated
+  })
+
   ipcMain.on(IPC.windowOpenProject, (_event, id: string) => openProjectWindow(id))
   ipcMain.on(IPC.windowOpenLauncher, () => createLauncherWindow())
 
@@ -108,6 +133,11 @@ function registerIpc(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     return showSaveFileDialog(win, defaultPath)
   })
+  ipcMain.handle(IPC.filesShowOpenFolderDialog, (event, defaultPath?: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return showOpenFolderDialog(win, defaultPath)
+  })
+  ipcMain.handle(IPC.filesPathIsDirectory, (_event, path: string) => isDirectory(path))
 
   ipcMain.handle(IPC.scratchpadLoad, (_event, projectId: string) => loadScratchpad(projectId))
   ipcMain.on(IPC.scratchpadSave, (_event, projectId: string, content: string) =>
@@ -137,10 +167,25 @@ function registerIpc(): void {
   ipcMain.handle(IPC.watchSyncGetActivity, (_event, projectId: string) => getActivity(projectId))
 }
 
+// § path validation layer — checked on app launch for every registered
+// project (this loop), on each window open (windows.ts), and before any
+// action that uses the path (pty.ts, commands.ts, watchSync.ts). Log-only
+// here: there's no UI to point at yet this early, the launcher/project
+// windows do their own validate() calls once mounted.
+function logInvalidProjectPaths(): void {
+  for (const project of listProjects()) {
+    const validation = validateProject(project.id)
+    if (!validation.valid) {
+      console.warn(`[ShinShell] Project "${project.name}" (${project.id}) path invalid: ${validation.reason}`)
+    }
+  }
+}
+
 app.whenReady().then(() => {
   registerIpc()
   warmClaudeChatPartition()
   watchDisplayChanges()
+  logInvalidProjectPaths()
   restoreWindows()
   ensureScheduledTaskIfElevated()
   registerGlobalHotkeys()

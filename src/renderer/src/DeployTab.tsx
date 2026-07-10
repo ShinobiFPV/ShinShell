@@ -12,6 +12,10 @@ interface DeployTabProps {
   config: ProjectConfig
   active: boolean
   armed: ArmedCommand | null
+  /** § path validation — deploys and watch-and-sync both spawn against
+   *  workingDir, so both go through the same gate as new terminal tabs. */
+  pathValid: boolean
+  guardPathValid: () => boolean
   requestConfirm: (cmd: ProjectCommand, execute: () => void) => void
   /** §UX3 — reports a run's lifecycle so ProjectWindow can drive taskbar
    *  progress/flash, a completion toast, and the failed-tab glow. */
@@ -36,6 +40,8 @@ export default function DeployTab({
   config,
   active,
   armed,
+  pathValid,
+  guardPathValid,
   requestConfirm,
   onRunStart,
   onRunEnd
@@ -64,9 +70,12 @@ export default function DeployTab({
 
   const toggleWatch = useCallback(() => {
     const next = !watchEnabled
+    // Turning watch-and-sync OFF is always allowed (getting out of a broken
+    // state shouldn't itself be blocked); only enabling it is gated.
+    if (next && !guardPathValid()) return
     setWatchEnabled(next)
     window.shinshell.watchSync.setEnabled(projectId, next)
-  }, [watchEnabled, projectId])
+  }, [watchEnabled, projectId, guardPathValid])
 
   useEffect(() => {
     const container = containerRef.current
@@ -99,6 +108,7 @@ export default function DeployTab({
   const run = useCallback(
     (commandId: string, label: string, commandStr: string) => {
       if (running) return
+      if (!guardPathValid()) return
       const xterm = xtermRef.current
       if (!xterm) return
       setRunning(true)
@@ -141,7 +151,7 @@ export default function DeployTab({
         oneShotCommand: substituted
       })
     },
-    [running, config, projectId, onRunStart, onRunEnd]
+    [running, config, projectId, onRunStart, onRunEnd, guardPathValid]
   )
 
   return (
@@ -153,7 +163,8 @@ export default function DeployTab({
           deployCommands.map((c) => (
             <button
               key={c.id}
-              disabled={running}
+              disabled={running || !pathValid}
+              title={pathValid ? undefined : 'Project folder not found — fix the path first'}
               className={armed?.id === c.id ? 'armed' : undefined}
               onClick={() =>
                 c.dangerous ? requestConfirm(c, () => run(c.id, c.label, c.command)) : run(c.id, c.label, c.command)

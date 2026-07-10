@@ -26,7 +26,10 @@ import AdminBadge from './AdminBadge'
 import ArmedCommandBanner from './ArmedCommandBanner'
 import Toast, { type ToastMessage } from './Toast'
 import HotkeySidebar from './HotkeySidebar'
+import EditProjectDialog from './EditProjectDialog'
 import { refitAllTerminals } from './terminalRegistry'
+
+const FOCUS_REVALIDATE_DEBOUNCE_MS = 300
 
 let idCounter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now()}-${idCounter++}`
@@ -102,9 +105,12 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [sidebarPinned, setSidebarPinned] = useState(false)
+  const [pathValid, setPathValid] = useState(true)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const restored = useRef(false)
   const initialCommandsRef = useRef(new Map<string, string>())
   const dirtyEditorTabsRef = useRef(new Set<string>())
+  const focusRevalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load the project config, then restore its saved tabs (cwd/filePath only
   // — no scrollback/editor-content restore, per spec §4) or fall back to a
@@ -132,6 +138,38 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
     })()
   }, [projectId])
 
+  // § path validation — checked when the window opens, re-checked on focus
+  // (a rename made while this window was in the background, e.g. via
+  // Explorer, surfaces without polling), and refreshed immediately whenever
+  // an edit is saved (either from this window's own dialog or the launcher's).
+  useEffect(() => {
+    window.shinshell.projects.validate(projectId).then((v) => setPathValid(v.valid))
+  }, [projectId])
+
+  useEffect(() => {
+    const onFocus = (): void => {
+      if (focusRevalidateTimer.current) clearTimeout(focusRevalidateTimer.current)
+      focusRevalidateTimer.current = setTimeout(() => {
+        window.shinshell.projects.validate(projectId).then((v) => setPathValid(v.valid))
+      }, FOCUS_REVALIDATE_DEBOUNCE_MS)
+    }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      if (focusRevalidateTimer.current) clearTimeout(focusRevalidateTimer.current)
+    }
+  }, [projectId])
+
+  useEffect(
+    () =>
+      window.shinshell.projects.onUpdated((updated) => {
+        if (updated.id !== projectId) return
+        setConfig(updated)
+        setPathValid(true) // a save only succeeds against a valid workingDir
+      }),
+    [projectId]
+  )
+
   // Conflict detection (§8: "editable in settings with conflict detection")
   // — no settings UI exists yet, so conflicts surface via console.warn
   // (visible in DevTools) rather than blocking the (human-editable, §3)
@@ -154,9 +192,27 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
 
   const activeTab = tabs.find((t) => t.id === activeTabId)
 
+  // § path validation — the single gate every "this uses workingDir and is
+  // about to spawn a pty" action goes through. Existing tabs/ptys are never
+  // touched by this; it only blocks creating new ones while the folder is
+  // missing, with a toast pointing at the fix.
+  const guardPathValid = useCallback((): boolean => {
+    if (pathValid) return true
+    setToasts((prev) => [
+      ...prev,
+      {
+        id: nextId('toast'),
+        text: 'Project folder not found — use Edit project details to fix the path',
+        kind: 'failure'
+      }
+    ])
+    return false
+  }, [pathValid])
+
   const newTabOfKind = useCallback(
     (kind: TabKind) => {
       if (!config) return
+      if ((kind === 'terminal' || kind === 'claude-code' || kind === 'log-tail') && !guardPathValid()) return
       if (kind === 'log-tail') {
         if (config.commands.length === 0) return
         setLogPickerOpen(true)
@@ -187,17 +243,21 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       setTabs((prev) => [...prev, tab])
       setActiveTabId(tab.id)
     },
-    [config, tabs]
+    [config, tabs, guardPathValid]
   )
 
   const newTab = useCallback(() => newTabOfKind('terminal'), [newTabOfKind])
 
-  const createLogTailTab = useCallback((cmd: ProjectCommand) => {
-    const tab = makeLogTailTab(cmd.id, cmd.label)
-    setTabs((prev) => [...prev, tab])
-    setActiveTabId(tab.id)
-    setLogPickerOpen(false)
-  }, [])
+  const createLogTailTab = useCallback(
+    (cmd: ProjectCommand) => {
+      if (!guardPathValid()) return
+      const tab = makeLogTailTab(cmd.id, cmd.label)
+      setTabs((prev) => [...prev, tab])
+      setActiveTabId(tab.id)
+      setLogPickerOpen(false)
+    },
+    [guardPathValid]
+  )
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -307,6 +367,10 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const executeCommand = useCallback(
     (cmd: ProjectCommand) => {
       if (!config) return
+      // "active-terminal" only types into an already-live pty (no new
+      // process, no path involved) so it's exempt — "new-tab" and
+      // "background" both spawn against workingDir and go through the gate.
+      if ((cmd.runIn === 'new-tab' || cmd.runIn === 'background') && !guardPathValid()) return
       const substituted = substituteVariables(cmd.command, config)
       if (cmd.runIn === 'new-tab') {
         const tab = makeTerminalTab(config.workingDir)
@@ -325,7 +389,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
         })
       }
     },
-    [config, activeTab, shellEnv]
+    [config, activeTab, shellEnv, guardPathValid]
   )
 
   // §UX2 — gate for any dangerous command trigger (hotkey, palette, or a tab's
@@ -437,7 +501,8 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       { id: 'tab-scratchpad', category: 'Tab', label: 'Open Scratchpad', run: () => newTabOfKind('scratchpad') },
       { id: 'tab-deploy', category: 'Tab', label: 'Open Deploy Tab', run: () => newTabOfKind('deploy') },
       { id: 'tab-ports', category: 'Tab', label: 'Open Ports Panel', run: () => newTabOfKind('ports') },
-      { id: 'tab-close', category: 'Tab', label: 'Close Active Tab', run: () => closeActivePane() }
+      { id: 'tab-close', category: 'Tab', label: 'Close Active Tab', run: () => closeActivePane() },
+      { id: 'edit-project', category: 'Project', label: 'Edit project details', run: () => setEditDialogOpen(true) }
     )
     for (const p of otherProjects) {
       actions.push({
@@ -581,6 +646,8 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                   <EditorTab
                     filePath={t.filePath}
                     active={active}
+                    pathValid={pathValid}
+                    guardPathValid={guardPathValid}
                     onFilePathChange={(path) => updateEditorFilePath(t.id, path)}
                     onDirtyChange={(dirty) => {
                       if (dirty) dirtyEditorTabsRef.current.add(t.id)
@@ -595,6 +662,8 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                     config={{ ...config, env: shellEnv }}
                     active={active}
                     armed={armed}
+                    pathValid={pathValid}
+                    guardPathValid={guardPathValid}
                     requestConfirm={requestConfirm}
                     onRunStart={handleDeployRunStart}
                     onRunEnd={handleDeployRunEnd}
@@ -629,8 +698,19 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           onRunCommand={runCommand}
           onToggleExpanded={() => setSidebarExpanded((v) => !v)}
           onTogglePinned={() => setSidebarPinned((v) => !v)}
+          onEditProject={() => setEditDialogOpen(true)}
         />
       </div>
+      {editDialogOpen && (
+        <EditProjectDialog
+          project={config}
+          onClose={() => setEditDialogOpen(false)}
+          onSaved={(updated) => {
+            setConfig(updated)
+            setPathValid(true)
+          }}
+        />
+      )}
     </div>
   )
 }

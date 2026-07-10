@@ -32,3 +32,18 @@ export async function showSaveFileDialog(
   if (result.canceled || !result.filePath) return null
   return result.filePath
 }
+
+/** Folder picker for the edit-project-details dialog's workingDir field. */
+export async function showOpenFolderDialog(
+  win: BrowserWindow | null,
+  defaultPath?: string
+): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = {
+    properties: ['openDirectory'],
+    defaultPath,
+    title: 'Select Project Folder'
+  }
+  const result = await (win ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options))
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+}

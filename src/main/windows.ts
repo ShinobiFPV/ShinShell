@@ -1,6 +1,7 @@
 import { BrowserWindow, app, screen } from 'electron'
 import { join } from 'path'
-import { getProject, listProjects } from './projects'
+import { getProject, listProjects, recordSuccessfulOpen } from './projects'
+import { validateProjectPath } from './projectValidation'
 import { createAccentDotIcon } from './icon'
 import { loadAppState, saveAppState, type WindowBounds } from './appState'
 import { killPtysForWindow } from './pty'
@@ -8,6 +9,7 @@ import { destroyClaudeChatViewsForWindow } from './claudeChat'
 import { unsubscribeSshHealth } from './sshHealth'
 import { startWatching, stopWatching } from './watchSync'
 import { IPC } from '../shared/ipc'
+import type { ProjectConfig } from '../shared/project'
 
 const projectWindows = new Map<string, BrowserWindow>()
 let launcherWindow: BrowserWindow | null = null
@@ -135,6 +137,12 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
   const config = getProject(projectId)
   if (!config) return null
 
+  // § path validation — opening the window is never blocked by a missing
+  // folder (a restored session with live terminals must still come back),
+  // but a valid open is the moment we refresh the git-remote fingerprint
+  // used for rename recovery later.
+  if (validateProjectPath(config.workingDir).valid) recordSuccessfulOpen(projectId)
+
   const win = new BrowserWindow(baseWindowOptions(projectId, 1280, 800))
   attachBoundsPersistence(win, projectId)
   win.setTitle(config.name)
@@ -170,6 +178,18 @@ export function restoreWindows(): void {
   for (const id of openProjectIds) {
     openProjectWindow(id)
   }
+}
+
+/** After "Edit project details" saves, updates the OS-level chrome (title,
+ *  taskbar accent dot) of that project's window if it's currently open, and
+ *  pushes the fresh config to its renderer — no-op if the window isn't
+ *  open, since the surface that made the edit already has its own copy. */
+export function refreshProjectWindowChrome(projectId: string, config: ProjectConfig): void {
+  const win = projectWindows.get(projectId)
+  if (!win || win.isDestroyed()) return
+  win.setTitle(config.name)
+  win.setOverlayIcon(createAccentDotIcon(config.accentColor), config.name)
+  win.webContents.send(IPC.projectsUpdated, config)
 }
 
 export function anyWindowOpen(): boolean {

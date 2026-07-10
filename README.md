@@ -176,7 +176,8 @@ not vibes). The shape:
   ],
   "watchSync": { "enabled": false, "globs": ["**/*.py"], "ignore": ["**/__pycache__/**", "**/.git/**", "**/.venv/**"], "onChange": "deploy", "debounceMs": 1500 },
   "ports": [8000, 8001, 8002, 8003, 8091, 8092, 8095, 8765, 8766, 8767],
-  "restore": { "tabs": [] }
+  "restore": { "tabs": [] },
+  "lastKnownGitRemote": "git@github.com:ShinobiFPV/imq2.git"
 }
 ```
 
@@ -185,7 +186,10 @@ Command strings support `{targets.<id>.<field>}`, `{workingDir}`, and
 `background`. Targets accept hostnames or IPs (Pi Zeros use dynamic Tailscale
 hostnames, so they'll be added ad hoc with `healthCheck: false`). Commands
 marked `"dangerous": true` don't fire on the first keypress — see
-**arm-to-confirm** in the UX section.
+**arm-to-confirm** in the UX section. `lastKnownGitRemote` is written
+automatically on every successful window open (§UX8) — it's what ranks
+rename-recovery suggestions when `workingDir` goes missing, not something
+you're expected to hand-edit.
 
 **Seed drift:** a project's config is only ever copied from these defaults
 once, into a brand-new (empty) `%APPDATA%/ShinShell/projects/` — after that
@@ -286,6 +290,21 @@ These aren't features — they're guardrails on the features above.
 7. **Color-first quick-switch.** Holding Ctrl+Alt pops a strip of colored
    project chips — alt-tab, but switching is a *color choice* instead of
    reading window titles. Same thesis, smallest possible form.
+8. **Path validation + edit dialog.** A project's `workingDir` isn't
+   guaranteed to still be there — folders get renamed, drives get
+   unmounted. Every registered project is checked (app launch, window
+   open, and again on launcher/window focus) without ever throwing; a
+   missing folder swaps a launcher card's open button for a warning +
+   **Fix path…**, and disables new tabs/commands/deploys/watch-sync in an
+   already-open window (existing terminals keep running — their ptys don't
+   care) with a toast pointing at the fix. **Edit project details**
+   (kebab menu on a card, gear icon in the project window's hotkey panel,
+   or the command palette) covers name/accent/workingDir/shell/env, with
+   live path validation and a native folder picker. When the path's
+   broken, the dialog scans its old parent directory and offers up to 3
+   "did you mean?" candidates — ranked by git remote match, then name
+   similarity, then recency — and clicking one applies *and saves* in a
+   single click, since a plain rename-in-place is the common case.
 
 Build priority if it comes down to it: prompt indicator (1) → arm-to-confirm
 (2) → completion toasts (3). Those three attack the founding mistake directly.
@@ -344,6 +363,12 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - [ ] Drag the window between two different-DPI monitors → prompt stays crisp (re-fit + redraw wired to the window's `moved` event and `display-metrics-changed`/scaleFactorChanged; not yet manually verified on real mixed-DPI hardware)
 - [ ] Window position/size persists per window (keyed by project id) and restores on the correct monitor when it's still attached, falling back to a default position when it isn't (implemented; not yet verified across an actual monitor unplug/replug)
 - [x] Minimum window size (640×480) enforced on both the launcher and project windows
+
+### Path validation + edit dialog (rename recovery)
+
+- [x] Rename a project's folder while ShinShell is closed → launch → the launcher card shows a warning + "Fix path…" (no open button); the edit dialog's "did you mean?" ranks the renamed folder first via git remote match; one click applies and saves; the card immediately opens normally and window chrome (title, accent) is correct
+- [x] Rename a project's folder while its window is open → existing terminal(s) keep running untouched; attempting a new tab is blocked with a toast pointing at Edit project details, surfacing on the next window focus (no polling)
+- [x] A bad/missing workingDir never throws past pty spawn, background commands, or watch-sync start — verified via the above (no crash, just a graceful block + log line)
 
 ## House rules (for Claude Code)
 

@@ -13,7 +13,13 @@ import {
   type GitStatus,
   type WatchSyncActivityEntry
 } from '../shared/ipc'
-import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
+import type {
+  ProjectConfig,
+  ProjectRestoreState,
+  ProjectValidation,
+  PathCandidate,
+  ProjectUpdatePayload
+} from '../shared/project'
 
 const api = {
   pty: {
@@ -44,7 +50,16 @@ const api = {
     saveRestoreState: (id: string, restore: ProjectRestoreState): void =>
       ipcRenderer.send(IPC.projectsSaveRestoreState, id, restore),
     createFromFolder: (): Promise<ProjectConfig | null> =>
-      ipcRenderer.invoke(IPC.projectsCreateFromFolder)
+      ipcRenderer.invoke(IPC.projectsCreateFromFolder),
+    validate: (id: string): Promise<ProjectValidation> => ipcRenderer.invoke(IPC.projectsValidate, id),
+    suggestFixes: (id: string): Promise<PathCandidate[]> => ipcRenderer.invoke(IPC.projectsSuggestFixes, id),
+    update: (payload: ProjectUpdatePayload): Promise<ProjectConfig> =>
+      ipcRenderer.invoke(IPC.projectsUpdate, payload),
+    onUpdated: (cb: (config: ProjectConfig) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ProjectConfig): void => cb(payload)
+      ipcRenderer.on(IPC.projectsUpdated, listener)
+      return () => ipcRenderer.removeListener(IPC.projectsUpdated, listener)
+    }
   },
   window: {
     openProject: (id: string): void => ipcRenderer.send(IPC.windowOpenProject, id),
@@ -92,7 +107,10 @@ const api = {
     showOpenDialog: (defaultPath?: string): Promise<string | null> =>
       ipcRenderer.invoke(IPC.filesShowOpenDialog, defaultPath),
     showSaveDialog: (defaultPath?: string): Promise<string | null> =>
-      ipcRenderer.invoke(IPC.filesShowSaveDialog, defaultPath)
+      ipcRenderer.invoke(IPC.filesShowSaveDialog, defaultPath),
+    showOpenFolderDialog: (defaultPath?: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.filesShowOpenFolderDialog, defaultPath),
+    pathIsDirectory: (path: string): Promise<boolean> => ipcRenderer.invoke(IPC.filesPathIsDirectory, path)
   },
   scratchpad: {
     load: (projectId: string): Promise<string> => ipcRenderer.invoke(IPC.scratchpadLoad, projectId),

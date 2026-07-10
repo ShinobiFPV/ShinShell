@@ -1,8 +1,9 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, basename } from 'path'
-import type { ProjectConfig, ProjectRestoreState } from '../shared/project'
+import type { ProjectConfig, ProjectRestoreState, ProjectUpdatePayload, ProjectValidation, PathCandidate } from '../shared/project'
 import { emptyRestoreState } from '../shared/project'
+import { validateProjectPath, findRenameCandidates, readGitRemote } from './projectValidation'
 
 const projectsDir = (): string => join(app.getPath('userData'), 'projects')
 
@@ -92,6 +93,60 @@ export function saveProjectRestoreState(id: string, restore: ProjectRestoreState
   const config = getProject(id)
   if (!config) return
   saveProject({ ...config, restore })
+}
+
+/** § path validation layer — checked on app launch (for every project), on
+ *  window open, and before any action that touches workingDir. Never
+ *  throws: an unknown project just reads as invalid rather than blowing up
+ *  a caller that hasn't checked existence first. */
+export function validateProject(id: string): ProjectValidation {
+  const config = getProject(id)
+  if (!config) return { valid: false, reason: 'Project not found' }
+  return validateProjectPath(config.workingDir)
+}
+
+/** § smart recovery suggestion — "did you mean?" candidates for a project
+ *  whose workingDir has gone missing, ranked by projectValidation.ts. */
+export function suggestFixes(id: string): PathCandidate[] {
+  const config = getProject(id)
+  if (!config) return []
+  return findRenameCandidates(config.workingDir, config.lastKnownGitRemote)
+}
+
+/** Called after a project window successfully opens against a valid path —
+ *  persists the current git remote (if any) so a later rename can be
+ *  matched back with confidence. Never overwrites a known-good remote with
+ *  nothing just because .git was briefly unreadable. */
+export function recordSuccessfulOpen(id: string): void {
+  const config = getProject(id)
+  if (!config) return
+  const remote = readGitRemote(config.workingDir)
+  if (remote && remote !== config.lastKnownGitRemote) {
+    saveProject({ ...config, lastKnownGitRemote: remote })
+  }
+}
+
+/** § Edit project details — deliberately whitelisted fields only; `id`,
+ *  commands/targets/watchSync/ports/restore aren't touched by this dialog.
+ *  Throws if the project or the new workingDir don't check out, so the IPC
+ *  handler can reject the call rather than silently no-op. */
+export function updateProject(payload: ProjectUpdatePayload): ProjectConfig {
+  const existing = getProject(payload.id)
+  if (!existing) throw new Error(`Project "${payload.id}" not found`)
+  const validation = validateProjectPath(payload.workingDir)
+  if (!validation.valid) throw new Error(validation.reason ?? 'Invalid folder')
+
+  const updated: ProjectConfig = {
+    ...existing,
+    name: payload.name,
+    accentColor: payload.accentColor,
+    workingDir: payload.workingDir,
+    shell: payload.shell,
+    env: payload.env
+  }
+  saveProject(updated)
+  recordSuccessfulOpen(payload.id)
+  return getProject(payload.id) ?? updated
 }
 
 function slugify(name: string): string {

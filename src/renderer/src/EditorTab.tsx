@@ -5,6 +5,11 @@ import './monacoSetup'
 interface EditorTabProps {
   filePath: string | null
   active: boolean
+  /** § path validation — "opening the editor tree" (the native Open…
+   *  dialog) is one of the gated actions; an already-open buffer keeps
+   *  working regardless. */
+  pathValid: boolean
+  guardPathValid: () => boolean
   onFilePathChange: (path: string) => void
   onDirtyChange: (dirty: boolean) => void
 }
@@ -33,6 +38,8 @@ function languageForPath(path: string | null): string | undefined {
 export default function EditorTab({
   filePath,
   active,
+  pathValid,
+  guardPathValid,
   onFilePathChange,
   onDirtyChange
 }: EditorTabProps): JSX.Element {
@@ -97,6 +104,7 @@ export default function EditorTab({
   }, [active])
 
   const openFile = useCallback(async () => {
+    if (!guardPathValid()) return
     const path = await window.shinshell.files.showOpenDialog()
     if (!path) return
     const content = await window.shinshell.files.read(path)
@@ -110,12 +118,14 @@ export default function EditorTab({
     onFilePathChange(path)
     filePathRef.current = path
     onDirtyChange(false)
-  }, [onFilePathChange, onDirtyChange])
+  }, [onFilePathChange, onDirtyChange, guardPathValid])
 
   return (
     <div className="editor-tab">
       <div className="editor-toolbar">
-        <button onClick={openFile}>Open…</button>
+        <button onClick={openFile} title={pathValid ? undefined : 'Project folder not found — fix the path first'}>
+          Open…
+        </button>
         <button onClick={save}>Save</button>
         <span className="editor-path">{filePath || '(unsaved)'}</span>
       </div>

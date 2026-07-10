@@ -400,6 +400,7 @@ body::after {
   gap: 4px;
 }
 
+.hotkey-edit,
 .hotkey-pin,
 .hotkey-close {
   background: none;
@@ -412,6 +413,7 @@ body::after {
   padding: 2px 6px;
 }
 
+.hotkey-edit:hover,
 .hotkey-pin:hover,
 .hotkey-close:hover {
   border-color: var(--accent);
@@ -753,7 +755,6 @@ body::after {
   border: 1px solid #262626;
   border-radius: 8px;
   overflow: hidden;
-  cursor: pointer;
   padding: 0;
   text-align: left;
   color: inherit;
@@ -774,18 +775,90 @@ body::after {
   padding: 14px 16px;
 }
 
-.project-card-name {
-  font-size: 14px;
-  font-weight: 600;
+.project-card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 4px;
 }
 
-.project-card-dir {
+.project-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* § edit project details — a plain "⋯" rather than a full kebab menu since
+   there's only ever the one action; opens EditProjectDialog. */
+.project-card-edit {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #777;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.project-card-edit:hover {
+  border-color: var(--h9000-cyan);
+  color: #fff;
+}
+
+.project-card-open {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
   font-size: 11px;
   color: #888;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-card-open:hover {
+  color: #fff;
+}
+
+/* § path validation — a project whose workingDir doesn't resolve loses its
+   open button in favor of a warning + one-click fix, never a silent crash
+   when you eventually click it. */
+.project-card-broken {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.project-card-warning {
+  font-size: 11px;
+  color: var(--h9000-amber);
+  white-space: normal;
+  word-break: break-all;
+}
+
+.project-card-fix {
+  background: rgba(255, 180, 0, 0.1);
+  border: 1px solid rgba(255, 180, 0, 0.35);
+  border-radius: 4px;
+  color: var(--h9000-amber);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+.project-card-fix:hover {
+  background: rgba(255, 180, 0, 0.2);
 }
 
 /* SSH health light (§6.7) */
@@ -1220,4 +1293,262 @@ body::after {
   font-size: 12px;
   padding: 16px;
   text-align: center;
+}
+
+/* Edit project details dialog (§ path validation + edit dialog) — reuses
+   .command-picker-backdrop for the dimmed overlay. */
+.edit-project-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 480px;
+  max-width: calc(100% - 40px);
+  max-height: calc(100% - 60px);
+  display: flex;
+  flex-direction: column;
+  background: #161616;
+  border: 1px solid #2e2e2e;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.edit-project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ccc;
+  border-bottom: 1px solid #262626;
+  flex: 0 0 auto;
+}
+
+.edit-project-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edit-project-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: #999;
+}
+
+.edit-project-field input {
+  background: #1c1c1c;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  color: #e8e8e8;
+  font-size: 13px;
+  padding: 7px 9px;
+}
+
+.edit-project-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.edit-project-field input:disabled {
+  color: #666;
+  cursor: not-allowed;
+}
+
+.edit-project-accent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-project-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.edit-project-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.edit-project-swatch.selected {
+  border-color: #fff;
+}
+
+.edit-project-hex {
+  flex: 1;
+  min-width: 0;
+  font-family: Consolas, monospace;
+}
+
+.edit-project-path-row {
+  display: flex;
+  gap: 6px;
+}
+
+.edit-project-path-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-project-path-row button {
+  flex: 0 0 auto;
+  background: #1c1c1c;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.edit-project-path-row button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.edit-project-input-invalid {
+  border-color: var(--h9000-red) !important;
+}
+
+.edit-project-path-error {
+  color: var(--h9000-red);
+  font-size: 11px;
+}
+
+.edit-project-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 180, 0, 0.06);
+  border: 1px solid rgba(255, 180, 0, 0.2);
+  border-radius: 6px;
+}
+
+.edit-project-suggestions-label {
+  font-size: 11px;
+  color: var(--h9000-amber);
+  font-weight: 600;
+  flex: 0 0 100%;
+}
+
+.edit-project-suggestion {
+  background: #1c1c1c;
+  border: 1px solid var(--h9000-amber);
+  border-radius: 4px;
+  color: #e8e8e8;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.edit-project-suggestion:hover {
+  background: rgba(255, 180, 0, 0.18);
+}
+
+.edit-project-suggestion-reason {
+  color: #999;
+}
+
+.edit-project-env-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-project-env-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.edit-project-env-row input:first-child {
+  flex: 0 0 40%;
+  font-family: Consolas, monospace;
+}
+
+.edit-project-env-row input:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  font-family: Consolas, monospace;
+}
+
+.edit-project-env-remove {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.edit-project-env-remove:hover {
+  color: var(--h9000-red);
+}
+
+.edit-project-env-add {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed #2e2e2e;
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 5px 10px;
+}
+
+.edit-project-env-add:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.edit-project-save-error {
+  color: var(--h9000-red);
+  font-size: 12px;
+}
+
+.edit-project-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #262626;
+  flex: 0 0 auto;
+}
+
+.edit-project-footer button:not(.btn-primary) {
+  background: none;
+  border: 1px solid #2e2e2e;
+  border-radius: 6px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.edit-project-footer button:not(.btn-primary):hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.edit-project-footer .btn-primary:disabled {
+  background: #2e2e2e;
+  color: #777;
+  cursor: not-allowed;
 }

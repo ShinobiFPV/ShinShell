@@ -70,8 +70,38 @@ export interface ProjectConfig {
   watchSync: WatchSyncConfig
   ports: number[]
   restore: ProjectRestoreState
+  /** Git remote of workingDir as of the last successful open — used to rank
+   *  "did you mean?" rename-recovery candidates when the folder goes missing.
+   *  Never cleared once set; a later open with no readable remote just
+   *  leaves the last-known value in place. */
+  lastKnownGitRemote?: string
 }
 
 export function emptyRestoreState(): ProjectRestoreState {
   return { tabs: [], activeTabId: null }
+}
+
+/** Path-validation result for a project's workingDir (§ path validation). */
+export interface ProjectValidation {
+  valid: boolean
+  reason?: string
+}
+
+/** A candidate replacement folder offered when a project's workingDir is
+ *  missing, ranked by how it was matched. */
+export interface PathCandidate {
+  path: string
+  reason: 'git-remote' | 'name-match' | 'recent'
+}
+
+/** Payload for editing a project's details — deliberately excludes `id`
+ *  (keys the config filename + restore state) and the command/target/
+ *  watchSync/ports/restore machinery, which the edit dialog doesn't touch. */
+export interface ProjectUpdatePayload {
+  id: string
+  name: string
+  accentColor: string
+  workingDir: string
+  shell: string
+  env: Record<string, string>
 }

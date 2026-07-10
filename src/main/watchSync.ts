@@ -6,6 +6,7 @@ import { join } from 'path'
 import { IPC, type WatchSyncActivityEntry } from '../shared/ipc'
 import { getProject, saveProject } from './projects'
 import { substituteVariables } from '../shared/commandSubstitution'
+import { validateProjectPath } from './projectValidation'
 
 // §6.10 — watches a project's configured globs, and on change (debounced)
 // runs the referenced command. Ambient/background by design: no visible
@@ -59,6 +60,16 @@ export function startWatching(win: BrowserWindow, projectId: string): void {
   const config = getProject(projectId)
   if (!config || !config.watchSync.enabled || config.watchSync.globs.length === 0) return
 
+  // § path validation — starting a watcher against a missing folder is
+  // exactly the "before any action that uses the path" case; skip quietly
+  // (one log line, not an error dialog) rather than let chokidar spam
+  // ENOENT events at the missing root.
+  const validation = validateProjectPath(config.workingDir)
+  if (!validation.valid) {
+    console.warn(`[watch-sync] not starting for project "${config.name}": ${validation.reason}`)
+    return
+  }
+
   const debounceMs = config.watchSync.debounceMs || 1500
   const watcher = chokidar.watch(config.watchSync.globs, {
     cwd: config.workingDir,
@@ -76,6 +87,14 @@ export function startWatching(win: BrowserWindow, projectId: string): void {
         triggerSync(projectId, changedPath, win)
       }, debounceMs)
     )
+  })
+
+  // The watched root itself disappearing (renamed/deleted while watching)
+  // surfaces here — stop silently instead of leaving a dead watcher
+  // retrying forever or spamming errors.
+  watcher.on('error', (err) => {
+    console.warn(`[watch-sync] stopped for project "${config.name}": ${err instanceof Error ? err.message : err}`)
+    stopWatching(projectId)
   })
 
   watchers.set(projectId, watcher)
