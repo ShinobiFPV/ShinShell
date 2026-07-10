@@ -1,4 +1,12 @@
-import type { ProjectConfig } from './project'
+import type { ProjectCommand, ProjectConfig, ProjectTarget } from './project'
+
+// Pull the first {targets.<id>.…} reference out of a command string and
+// resolve it against the project's targets — used by the arm-to-confirm
+// summary (§UX2) and the hotkey sidebar's "target" column (§UX4).
+export function findCommandTarget(cmd: ProjectCommand, config: ProjectConfig): ProjectTarget | undefined {
+  const match = /\{targets\.([\w-]+)\./.exec(cmd.command)
+  return match ? config.targets.find((t) => t.id === match[1]) : undefined
+}
 
 // {workingDir}, {env.NAME}, {targets.<id>.<field>} substitution — spec §7.
 export function substituteVariables(command: string, config: ProjectConfig): string {

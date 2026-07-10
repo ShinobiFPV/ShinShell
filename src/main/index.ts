@@ -69,6 +69,16 @@ function registerIpc(): void {
   ipcMain.on(IPC.windowOpenProject, (_event, id: string) => openProjectWindow(id))
   ipcMain.on(IPC.windowOpenLauncher, () => createLauncherWindow())
 
+  // §UX3 — outcome feedback: taskbar progress while a run is active (2 =
+  // indeterminate, duration unknown ahead of time) and a brief taskbar flash
+  // on completion, so a deploy result doesn't require tabbing back to see.
+  ipcMain.on(IPC.windowSetProgress, (event, progress: number | null) => {
+    BrowserWindow.fromWebContents(event.sender)?.setProgressBar(progress ?? -1)
+  })
+  ipcMain.on(IPC.windowFlash, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.flashFrame(true)
+  })
+
   ipcMain.on(IPC.commandsRunBackground, (_event, opts: BackgroundCommandOptions) =>
     runBackgroundCommand(opts)
   )

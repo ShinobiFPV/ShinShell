@@ -26,19 +26,61 @@ function ensureSeeded(): void {
   }
 }
 
+// Seed drift: ensureSeeded() above only ever populates a brand-new (empty)
+// projects dir, so a field added to a default command later (e.g. this
+// project's own `dangerous: true` on imq2's deploy-restart) never reaches an
+// install that already has that project's config on disk — it just keeps
+// getting re-saved in its old shape every time restore state is persisted.
+// This backfills any command field present in the seed but missing from the
+// saved copy, matched by command id. It never overwrites a field the user's
+// copy already has — including an explicit override like `"dangerous": false`
+// — and never adds a command the seed has that the user's config doesn't;
+// that's a bigger call (re-adding something the user may have deleted on
+// purpose) than "propagate a schema addition."
+function migrateFromSeed(config: ProjectConfig): ProjectConfig {
+  const seedPath = join(seedDir(), `${config.id}.json`)
+  if (!existsSync(seedPath)) return config
+
+  let seed: ProjectConfig
+  try {
+    seed = JSON.parse(readFileSync(seedPath, 'utf-8')) as ProjectConfig
+  } catch {
+    return config
+  }
+
+  const seedCommandsById = new Map(seed.commands.map((c) => [c.id, c]))
+  let changed = false
+  const commands = config.commands.map((cmd) => {
+    const seedCmd = seedCommandsById.get(cmd.id)
+    if (!seedCmd) return cmd
+    const merged = { ...seedCmd, ...cmd }
+    if (Object.keys(merged).length !== Object.keys(cmd).length) changed = true
+    return merged
+  })
+
+  return changed ? { ...config, commands } : config
+}
+
+function loadProjectFile(path: string): ProjectConfig {
+  const config = JSON.parse(readFileSync(path, 'utf-8')) as ProjectConfig
+  const migrated = migrateFromSeed(config)
+  if (migrated !== config) saveProject(migrated)
+  return migrated
+}
+
 export function listProjects(): ProjectConfig[] {
   ensureSeeded()
   const dir = projectsDir()
   return readdirSync(dir)
     .filter((f) => f.endsWith('.json'))
-    .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf-8')) as ProjectConfig)
+    .map((f) => loadProjectFile(join(dir, f)))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export function getProject(id: string): ProjectConfig | undefined {
   const path = join(projectsDir(), `${id}.json`)
   if (!existsSync(path)) return undefined
-  return JSON.parse(readFileSync(path, 'utf-8')) as ProjectConfig
+  return loadProjectFile(path)
 }
 
 export function saveProject(config: ProjectConfig): void {

@@ -168,7 +168,7 @@ not vibes). The shape:
   ],
   "commands": [
     { "id": "deploy",         "label": "Deploy to Pi",       "command": "./deploy.ps1",          "hotkey": "Ctrl+1",       "runIn": "new-tab" },
-    { "id": "deploy-restart", "label": "Deploy + Restart Q2","command": "./deploy.ps1 -restart", "hotkey": "Ctrl+Shift+1", "runIn": "new-tab" },
+    { "id": "deploy-restart", "label": "Deploy + Restart Q2","command": "./deploy.ps1 -restart", "hotkey": "Ctrl+Shift+1", "runIn": "new-tab", "dangerous": true },
     { "id": "logs",           "label": "Tail Q2 logs",       "command": "ssh {targets.shinobi.host} tail -n 50 -f imq2/logs/imq2.log", "hotkey": "Ctrl+2", "runIn": "new-tab" },
     { "id": "attach",         "label": "Attach Q2 tmux",     "command": "ssh -t {targets.shinobi.host} 'cd imq2 && bash scripts/q2_attach.sh'", "hotkey": "Ctrl+5", "runIn": "new-tab" }
   ],
@@ -181,7 +181,19 @@ not vibes). The shape:
 Command strings support `{targets.<id>.<field>}`, `{workingDir}`, and
 `{env.<NAME>}` substitution. `runIn` is `new-tab` | `active-terminal` |
 `background`. Targets accept hostnames or IPs (Pi Zeros use dynamic Tailscale
-hostnames, so they'll be added ad hoc with `healthCheck: false`).
+hostnames, so they'll be added ad hoc with `healthCheck: false`). Commands
+marked `"dangerous": true` don't fire on the first keypress — see
+**arm-to-confirm** in the UX section.
+
+**Seed drift:** a project's config is only ever copied from these defaults
+once, into a brand-new (empty) `%APPDATA%/ShinShell/projects/` — after that
+it's the user's file, and `ensureSeeded()` never touches it again. So a field
+added to a default command later (like `deploy-restart`'s `dangerous: true`)
+still reaches an install that already has that project on disk,
+`getProject`/`listProjects` backfill any command field present in the seed
+but missing from the saved copy, matched by command id. Never overwrites a
+field — or an explicit override like `"dangerous": false` — the user's copy
+already has, and never resurrects a command the user deleted.
 
 **SSH convention (decided in Phase 0):** aliases everywhere. `~/.ssh/config`
 defines `Host shinobi` (LAN) and `Host shinobi-ts` (Tailscale); ShinShell
@@ -227,6 +239,57 @@ gentleman.
 
 ---
 
+## UX details (the anti-wrong-window kit)
+
+The design test for everything in this section: does it *reinforce knowing where
+you are*, or *reduce keystrokes you already type*? If neither, it doesn't ship.
+These aren't features — they're guardrails on the features above.
+
+1. **Color where your eyes actually are.** Window chrome is easy to tune out
+   once a terminal is full-screen, so the accent color follows your focus: a
+   thin accent strip along the top of every tab's content area, and — the
+   sneaky one — an env var (`SHINSHELL_PROJECT`, `SHINSHELL_ACCENT`) injected
+   into every pty so an Oh-My-Posh segment renders the project name, in the
+   project color, **inside the prompt itself**. You look at the prompt when
+   you type. That's where the guardrail lives.
+2. **Arm-to-confirm on dangerous commands.** Commands flagged `dangerous: true`
+   don't fire on the hotkey — they *arm*. The deploy button pulses in the
+   accent color showing exactly what's loaded ("Deploy + Restart Q2 →
+   shinobi"), and the same key confirms within 3 seconds or it disarms. One
+   extra keystroke, only where the wrong-window mistake actually hurts.
+   Regular deploys stay one-touch.
+3. **Outcomes without babysitting.** Deploys are long enough to tab away from:
+   `setProgressBar` on the taskbar icon while running, then a toast + brief
+   taskbar flash on completion — green or red. A failed run also leaves its
+   tab glowing red until it's been looked at. Exit code 1 does not get to
+   scroll quietly into history.
+4. **Hotkey sidebar.** Ctrl+1–5 means different things per project *by
+   design*, so the bindings live in a **collapsible sidebar** instead of
+   cluttering the top of the window: a slim icon rail on the right edge that
+   expands on **Ctrl+/** (or clicking the rail) into a panel listing the
+   current project's commands — hotkey, label, target — in the project's
+   accent color, with `dangerous` commands marked. Rows are clickable (click =
+   run, same arm rules apply), so it doubles as a mouse-friendly command list
+   for the dev buddies. Auto-collapses on Esc or refocusing the terminal;
+   pinnable open for learning week. Collapsed, it's ~40px of icons; the
+   terminal keeps the real estate.
+5. **A health light that earns its tooltip.** The SSH dot stays binary at a
+   glance, but hovering it answers the whole "is the Pi okay" question:
+   round-trip latency, LAN vs. Tailscale resolution, time since last
+   successful deploy, and that deploy's exit code.
+6. **Tab titles that describe state, not type.** "Terminal 2" tells you
+   nothing; `~/imq2 (main*)` — cwd + git branch + dirty marker — is
+   orientation. Log-tail tabs surface connected/reconnecting state in the
+   title.
+7. **Color-first quick-switch.** Holding Ctrl+Alt pops a strip of colored
+   project chips — alt-tab, but switching is a *color choice* instead of
+   reading window titles. Same thesis, smallest possible form.
+
+Build priority if it comes down to it: prompt indicator (1) → arm-to-confirm
+(2) → completion toasts (3). Those three attack the founding mistake directly.
+
+---
+
 ## Milestones
 
 Each milestone runs end-to-end before the next begins. Commit per milestone.
@@ -235,17 +298,22 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - **M1 — Terminal core:** shell + xterm.js/node-pty tabs, Oh-My-Posh verified
   pixel-identical to standalone pwsh, splits, terminal session restore.
 - **M2 — Projects & windows:** config schema, launcher window, per-project
-  windows, accent colors, taskbar dots.
+  windows, accent colors, taskbar dots, accent content strips, and the
+  `SHINSHELL_*` env vars + Oh-My-Posh prompt segment (UX 1).
 - **M3 — Elevation & packaging:** NSIS installer, scheduled-task registration,
   zero-prompt elevated launch verified, ADMIN badge. (Crib from AC1Companion's
   electron-builder setup.)
 - **M4 — Commands & hotkeys:** saved commands, variable substitution, both
-  hotkey scopes, injection mode.
+  hotkey scopes, injection mode, arm-to-confirm for `dangerous` commands
+  (UX 2), collapsible hotkey sidebar (UX 4).
 - **M5 — Claude & editor tabs:** claude-chat WebContentsView with OAuth verified,
   claude-code preset, Monaco + scratchpad.
-- **M6 — Pipeline features:** deploy tab with flag toggles, SSH health, log-tail,
-  port panel with collision warnings.
-- **M7 — Polish:** watch-and-sync, command palette, git status, theming, README.
+- **M6 — Pipeline features:** deploy tab with flag toggles, SSH health with
+  rich tooltip (UX 5), completion toasts + taskbar progress + red failed-tab
+  glow (UX 3), log-tail, port panel with collision warnings, stateful tab
+  titles (UX 6).
+- **M7 — Polish:** watch-and-sync, command palette, git status, color-first
+  quick-switcher (UX 7), theming, README.
 
 ---
 
@@ -258,6 +326,10 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - [ ] Claude tab stays signed in across app restarts
 - [ ] Force-kill the app → relaunch restores every window, tab, and working dir
 - [ ] Pull the Pi's ethernet → SSH light goes red within ~30s
+- [x] The prompt itself shows the project name in the project color — full-screen terminal, chrome invisible, you still know where you are
+- [ ] Ctrl+Shift+1 arms (does not fire) Deploy + Restart; second press within 3s fires it; waiting disarms it
+- [ ] A failed deploy leaves visible evidence (red tab glow + toast) even if you were in another window when it died
+- [ ] Ctrl+/ expands the hotkey sidebar to a clickable command list in the project's accent color; clicking into a terminal (or Esc) collapses it again unless pinned
 - [ ] Everything except the Claude tab and remote features works offline
 
 ## House rules (for Claude Code)

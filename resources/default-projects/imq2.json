@@ -11,7 +11,7 @@
   ],
   "commands": [
     { "id": "deploy", "label": "Deploy to Pi", "command": "./deploy.ps1", "hotkey": "Ctrl+1", "runIn": "new-tab" },
-    { "id": "deploy-restart", "label": "Deploy + Restart Q2", "command": "./deploy.ps1 -restart", "hotkey": "Ctrl+Shift+1", "runIn": "new-tab" },
+    { "id": "deploy-restart", "label": "Deploy + Restart Q2", "command": "./deploy.ps1 -restart", "hotkey": "Ctrl+Shift+1", "runIn": "new-tab", "dangerous": true },
     { "id": "logs", "label": "Tail Q2 logs", "command": "ssh {targets.shinobi.user}@{targets.shinobi.host} tail -n 50 -f imq2/logs/imq2.log", "hotkey": "Ctrl+2", "runIn": "new-tab" },
     { "id": "status", "label": "Q2 status (tmux)", "command": "ssh {targets.shinobi.user}@{targets.shinobi.host} 'cd imq2 && bash scripts/q2_status.sh'", "hotkey": "Ctrl+3", "runIn": "new-tab" },
     { "id": "restart", "label": "Restart Q2 (tmux)", "command": "ssh {targets.shinobi.user}@{targets.shinobi.host} 'cd imq2 && bash scripts/q2_stop.sh && bash scripts/q2_start.sh'", "hotkey": "Ctrl+4", "runIn": "new-tab" },

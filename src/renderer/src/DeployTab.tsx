@@ -2,14 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import type { ProjectConfig } from '../../shared/project'
+import type { ProjectConfig, ProjectCommand } from '../../shared/project'
 import type { DeployRun, WatchSyncActivityEntry } from '../../shared/ipc'
 import { substituteVariables } from '../../shared/commandSubstitution'
+import type { ArmedCommand } from './ProjectWindow'
 
 interface DeployTabProps {
   projectId: string
   config: ProjectConfig
   active: boolean
+  armed: ArmedCommand | null
+  requestConfirm: (cmd: ProjectCommand, execute: () => void) => void
+  /** §UX3 — reports a run's lifecycle so ProjectWindow can drive taskbar
+   *  progress/flash, a completion toast, and the failed-tab glow. */
+  onRunStart: () => void
+  onRunEnd: (exitCode: number) => void
 }
 
 let runCounter = 0
@@ -24,7 +31,15 @@ function formatWhen(ts: number): string {
   return new Date(ts).toLocaleString()
 }
 
-export default function DeployTab({ projectId, config, active }: DeployTabProps): JSX.Element {
+export default function DeployTab({
+  projectId,
+  config,
+  active,
+  armed,
+  requestConfirm,
+  onRunStart,
+  onRunEnd
+}: DeployTabProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -87,6 +102,7 @@ export default function DeployTab({ projectId, config, active }: DeployTabProps)
       const xterm = xtermRef.current
       if (!xterm) return
       setRunning(true)
+      onRunStart()
       xterm.reset()
       xterm.writeln(`$ ${commandStr}\r\n`)
 
@@ -112,6 +128,7 @@ export default function DeployTab({ projectId, config, active }: DeployTabProps)
         window.shinshell.deployHistory.append(projectId, run)
         setHistory((prev) => [run, ...prev].slice(0, 20))
         xterm.writeln(`\r\n[exit ${e.exitCode}, ${(run.durationMs / 1000).toFixed(1)}s]`)
+        onRunEnd(e.exitCode)
       })
 
       window.shinshell.pty.spawn({
@@ -124,7 +141,7 @@ export default function DeployTab({ projectId, config, active }: DeployTabProps)
         oneShotCommand: substituted
       })
     },
-    [running, config, projectId]
+    [running, config, projectId, onRunStart, onRunEnd]
   )
 
   return (
@@ -134,7 +151,14 @@ export default function DeployTab({ projectId, config, active }: DeployTabProps)
           <span className="deploy-empty">No deploy commands configured for this project.</span>
         ) : (
           deployCommands.map((c) => (
-            <button key={c.id} disabled={running} onClick={() => run(c.id, c.label, c.command)}>
+            <button
+              key={c.id}
+              disabled={running}
+              className={armed?.id === c.id ? 'armed' : undefined}
+              onClick={() =>
+                c.dangerous ? requestConfirm(c, () => run(c.id, c.label, c.command)) : run(c.id, c.label, c.command)
+              }
+            >
               {c.label}
             </button>
           ))

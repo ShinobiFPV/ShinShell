@@ -54,6 +54,73 @@ body::after {
   height: 100%;
 }
 
+/* §UX2 — arm-to-confirm banner: pulses in the project's accent color while a
+   dangerous command is armed, waiting on the confirming re-trigger. */
+.armed-command-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #0c0c0c;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  animation: armed-pulse 1s ease-in-out infinite;
+}
+
+.armed-command-hint {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+@keyframes armed-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* §UX3 — completion toasts, top-right, stacked newest-first. */
+.toast-stack {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.toast {
+  padding: 8px 14px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0c0c0c;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.toast-success {
+  background: var(--h9000-green-bright);
+}
+
+.toast-failure {
+  background: var(--h9000-red);
+  color: #fff;
+}
+
 .app-loading {
   display: flex;
   align-items: center;
@@ -103,6 +170,13 @@ body::after {
   box-shadow: inset 0 2px 0 var(--accent);
 }
 
+/* §UX3 — a failed run's tab keeps this until reselected (ProjectWindow.tsx
+   clears it on setActiveTabId), so exit code 1 doesn't scroll away quietly. */
+.tab.failed {
+  border-color: var(--h9000-red);
+  box-shadow: inset 0 2px 0 var(--h9000-red), 0 0 6px rgba(255, 60, 60, 0.6);
+}
+
 .tab-close {
   background: none;
   border: none;
@@ -141,11 +215,194 @@ body::after {
   border-color: var(--accent);
 }
 
+/* §UX4 — wraps the tab content so the hotkey sidebar can overlay just this
+   region (not the tab-strip-row above it) without stealing layout space. */
+.content-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 /* Panes */
 .pane-area {
   flex: 1;
   min-height: 0;
   display: flex;
+  /* §UX1 — accent strip: the guardrail survives a full-screen terminal even
+     though window chrome doesn't. */
+  border-top: 2px solid var(--accent);
+}
+
+/* §UX4 — collapsed hotkey rail: ~40px of glanceable icons, floating over the
+   content area's right edge so the terminal never loses width to it. */
+.hotkey-rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  background: rgba(20, 20, 20, 0.55);
+  border-left: 1px solid #262626;
+  cursor: pointer;
+}
+
+.hotkey-rail-toggle {
+  color: #888;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hotkey-rail-badge {
+  min-width: 22px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  color: #e8e8e8;
+  font-size: 10px;
+  text-align: center;
+}
+
+.hotkey-rail-badge.dangerous {
+  border-color: var(--h9000-red);
+  color: var(--h9000-red);
+}
+
+/* §UX4 — expanded command list: a click-to-run cheat sheet, same arm rules
+   as the keyboard path (see HotkeySidebar.tsx's onRunCommand). */
+.hotkey-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: #141414;
+  border-left: 1px solid var(--accent);
+  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.4);
+}
+
+.hotkey-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ccc;
+  border-bottom: 1px solid #262626;
+}
+
+.hotkey-panel-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.hotkey-pin,
+.hotkey-close {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.hotkey-pin:hover,
+.hotkey-close:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hotkey-pin.active {
+  color: var(--accent);
+}
+
+.hotkey-panel-rows {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.hotkey-panel-empty {
+  padding: 12px 10px;
+  color: #666;
+  font-size: 12px;
+}
+
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #1e1e1e;
+  color: #e8e8e8;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.hotkey-row:hover {
+  background: #1c1c1c;
+}
+
+.hotkey-row-key {
+  flex: 0 0 auto;
+  min-width: 64px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.hotkey-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hotkey-row-target {
+  flex: 0 0 auto;
+  color: #777;
+  font-size: 11px;
+}
+
+.hotkey-row-dangerous-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--h9000-red);
+  flex: 0 0 auto;
+}
+
+.hotkey-row.dangerous .hotkey-row-key {
+  color: var(--h9000-red);
+}
+
+.hotkey-row.armed {
+  background: var(--accent);
+  color: #0c0c0c;
+  animation: armed-pulse 1s ease-in-out infinite;
+}
+
+.hotkey-row.armed .hotkey-row-key,
+.hotkey-row.armed .hotkey-row-target {
+  color: #0c0c0c;
 }
 
 .split-container {
@@ -608,6 +865,14 @@ body::after {
 .deploy-toolbar button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* §UX2 — armed dangerous deploy command, mirrors .armed-command-banner. */
+.deploy-toolbar button.armed {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0c0c0c;
+  animation: armed-pulse 1s ease-in-out infinite;
 }
 
 .deploy-empty {

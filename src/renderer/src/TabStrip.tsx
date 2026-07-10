@@ -6,6 +6,8 @@ interface TabStripProps {
   onSelect: (tabId: string) => void
   onClose: (tabId: string) => void
   onNewTabKind: (kind: TabKind) => void
+  /** §UX3 — tabs whose last run failed; cleared once the tab is reselected. */
+  failedTabIds: Set<string>
 }
 
 const NEW_TAB_OPTIONS: { kind: TabKind; label: string; title: string }[] = [
@@ -24,14 +26,15 @@ export default function TabStrip({
   activeTabId,
   onSelect,
   onClose,
-  onNewTabKind
+  onNewTabKind,
+  failedTabIds
 }: TabStripProps): JSX.Element {
   return (
     <div className="tab-strip">
       {tabs.map((tab) => (
         <div
           key={tab.id}
-          className={`tab${tab.id === activeTabId ? ' active' : ''}`}
+          className={`tab${tab.id === activeTabId ? ' active' : ''}${failedTabIds.has(tab.id) ? ' failed' : ''}`}
           onMouseDown={() => onSelect(tab.id)}
         >
           <span className="tab-title">{tab.title}</span>

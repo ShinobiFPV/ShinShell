@@ -18,6 +18,8 @@ export const IPC = {
   windowOpenProject: 'window:openProject',
   windowOpenLauncher: 'window:openLauncher',
   windowNewTerminalTab: 'window:newTerminalTab',
+  windowSetProgress: 'window:setProgress',
+  windowFlash: 'window:flash',
   commandsRunBackground: 'commands:runBackground',
   claudeChatCreate: 'claudeChat:create',
   claudeChatSetBounds: 'claudeChat:setBounds',

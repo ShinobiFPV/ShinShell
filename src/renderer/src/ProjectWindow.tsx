@@ -21,12 +21,31 @@ import {
   type PaneNode
 } from './types'
 import type { ProjectConfig, ProjectCommand, RestoredTab } from '../../shared/project'
-import { substituteVariables } from '../../shared/commandSubstitution'
+import { substituteVariables, findCommandTarget } from '../../shared/commandSubstitution'
 import { matchesHotkey, findHotkeyConflicts } from './hotkeys'
 import AdminBadge from './AdminBadge'
+import ArmedCommandBanner from './ArmedCommandBanner'
+import Toast, { type ToastMessage } from './Toast'
+import HotkeySidebar from './HotkeySidebar'
 
 let idCounter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now()}-${idCounter++}`
+
+// §UX2 — arm-to-confirm: a dangerous command's first trigger only arms it;
+// the same trigger within this window fires it, otherwise it silently disarms.
+const ARM_WINDOW_MS = 3000
+
+export interface ArmedCommand {
+  id: string
+  summary: string
+  expiresAt: number
+}
+
+// "Deploy + Restart Q2 → shinobi" (§UX2).
+function commandSummary(cmd: ProjectCommand, config: ProjectConfig): string {
+  const target = findCommandTarget(cmd, config)
+  return target ? `${cmd.label} → ${target.host}` : cmd.label
+}
 
 function basename(path: string): string {
   return path.split(/[\\/]/).pop() || path
@@ -78,6 +97,11 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const [logPickerOpen, setLogPickerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [otherProjects, setOtherProjects] = useState<ProjectConfig[]>([])
+  const [armed, setArmed] = useState<ArmedCommand | null>(null)
+  const [failedTabIds, setFailedTabIds] = useState<Set<string>>(new Set())
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
+  const [sidebarPinned, setSidebarPinned] = useState(false)
   const restored = useRef(false)
   const initialCommandsRef = useRef(new Map<string, string>())
   const dirtyEditorTabsRef = useRef(new Set<string>())
@@ -200,8 +224,11 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
       setTabs((prev) =>
         prev.map((t) => (t.id === activeTab.id && isTerminalLike(t) ? { ...t, activePaneId: paneId } : t))
       )
+      // §UX4 — refocusing the terminal auto-collapses the hotkey sidebar,
+      // unless the user pinned it open.
+      setSidebarExpanded((expanded) => (expanded && !sidebarPinned ? false : expanded))
     },
-    [activeTab]
+    [activeTab, sidebarPinned]
   )
 
   const resizeSplit = useCallback(
@@ -261,12 +288,23 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
     )
   }, [activeTab, closeTab])
 
+  // §UX1 — SHINSHELL_PROJECT/SHINSHELL_ACCENT ride into every pty this window
+  // spawns so an Oh-My-Posh segment (paradox.omp.json) can render the project
+  // name in its accent color inside the prompt itself, not just window chrome.
+  const shellEnv = useMemo(
+    () =>
+      config
+        ? { ...config.env, SHINSHELL_PROJECT: config.name, SHINSHELL_ACCENT: config.accentColor }
+        : {},
+    [config]
+  )
+
   // Executes a saved command per its runIn (§7/§8):
   //  - "new-tab": open a fresh terminal tab and type the command + Enter.
   //  - "active-terminal": type into the focused pane's input, cursor left at
   //    the end — NOT executed, so the user can review/edit first.
   //  - "background": fire via the main process, no visible terminal.
-  const runCommand = useCallback(
+  const executeCommand = useCallback(
     (cmd: ProjectCommand) => {
       if (!config) return
       const substituted = substituteVariables(cmd.command, config)
@@ -283,11 +321,85 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           command: substituted,
           cwd: config.workingDir,
           shell: config.shell,
-          env: config.env
+          env: shellEnv
         })
       }
     },
-    [config, activeTab]
+    [config, activeTab, shellEnv]
+  )
+
+  // §UX2 — gate for any dangerous command trigger (hotkey, palette, or a tab's
+  // own button). Re-triggering the same armed command within ARM_WINDOW_MS
+  // fires it; any other trigger (re)arms instead of running.
+  const requestConfirm = useCallback(
+    (cmd: ProjectCommand, execute: () => void) => {
+      if (!config) return
+      setArmed((prev) => {
+        if (prev && prev.id === cmd.id && Date.now() < prev.expiresAt) {
+          execute()
+          return null
+        }
+        return { id: cmd.id, summary: commandSummary(cmd, config), expiresAt: Date.now() + ARM_WINDOW_MS }
+      })
+    },
+    [config]
+  )
+
+  // Auto-disarm: silently drops the armed command once its window expires.
+  useEffect(() => {
+    if (!armed) return
+    const timer = setTimeout(() => {
+      setArmed((prev) => (prev && prev.expiresAt <= Date.now() ? null : prev))
+    }, Math.max(0, armed.expiresAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [armed])
+
+  const runCommand = useCallback(
+    (cmd: ProjectCommand) => {
+      if (cmd.dangerous) requestConfirm(cmd, () => executeCommand(cmd))
+      else executeCommand(cmd)
+    },
+    [executeCommand, requestConfirm]
+  )
+
+  // §UX3 — a reselected tab has been "looked at," so its failure glow clears
+  // regardless of which code path changed activeTabId.
+  useEffect(() => {
+    if (!activeTabId) return
+    setFailedTabIds((prev) => {
+      if (!prev.has(activeTabId)) return prev
+      const next = new Set(prev)
+      next.delete(activeTabId)
+      return next
+    })
+  }, [activeTabId])
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const handleDeployRunStart = useCallback(() => {
+    window.shinshell.window.setProgress(2) // indeterminate — duration unknown ahead of time
+  }, [])
+
+  const handleDeployRunEnd = useCallback(
+    (exitCode: number) => {
+      window.shinshell.window.setProgress(null)
+      window.shinshell.window.flash()
+      if (exitCode !== 0) {
+        const deployTabId = tabs.find((t) => t.kind === 'deploy')?.id
+        if (deployTabId) setFailedTabIds((prev) => new Set(prev).add(deployTabId))
+      }
+      setToasts((prev) => [
+        ...prev,
+        {
+          id: nextId('toast'),
+          text: exitCode === 0 ? 'Deploy finished' : `Deploy failed (exit ${exitCode})`,
+          kind: exitCode === 0 ? 'success' : 'failure'
+        }
+      ])
+    },
+    [tabs]
   )
 
   // Global Ctrl+Alt+T (§8) — new terminal tab in whichever project window
@@ -337,8 +449,19 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   // command palette, and each saved command's own hotkey.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
+      // §UX4 — Esc always closes the hotkey sidebar (a deliberate dismiss,
+      // unlike the passive auto-collapse-on-refocus, so it applies even
+      // pinned) and doesn't fall through to any other binding.
+      if (e.key === 'Escape' && sidebarExpanded) {
+        e.preventDefault()
+        setSidebarExpanded(false)
+        return
+      }
       if (!e.ctrlKey) return
-      if (e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+      if (e.key === '/') {
+        e.preventDefault()
+        setSidebarExpanded((v) => !v)
+      } else if (e.shiftKey && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault()
         setPaletteOpen((v) => !v)
       } else if (e.key === 't' || e.key === 'T') {
@@ -372,7 +495,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activeTabId, newTab, closeActivePane, splitActivePane, config, runCommand])
+  }, [activeTabId, newTab, closeActivePane, splitActivePane, config, runCommand, sidebarExpanded])
 
   const updateTabTitle = useCallback((tabId: string, title: string) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, title } : t)))
@@ -396,11 +519,20 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   return (
     <div className="app" style={accentStyle}>
       <div className="tab-strip-row">
-        <TabStrip tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} onNewTabKind={newTabOfKind} />
+        <TabStrip
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelect={setActiveTabId}
+          onClose={closeTab}
+          onNewTabKind={newTabOfKind}
+          failedTabIds={failedTabIds}
+        />
         <GitStatusIndicator workingDir={config.workingDir} />
         <SshHealthLight projectId={projectId} hasTarget={hasHealthTarget} />
         <AdminBadge />
       </div>
+      {armed && <ArmedCommandBanner summary={armed.summary} />}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
       {logPickerOpen && (
         <div className="command-picker-backdrop" onMouseDown={() => setLogPickerOpen(false)}>
@@ -414,9 +546,19 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           </div>
         </div>
       )}
-      {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
-          tabs never tears down a live pty, browser session, or editor. */}
-      {tabs.map((t) => {
+      <div className="content-area">
+        <HotkeySidebar
+          config={config}
+          armed={armed}
+          expanded={sidebarExpanded}
+          pinned={sidebarPinned}
+          onRunCommand={runCommand}
+          onToggleExpanded={() => setSidebarExpanded((v) => !v)}
+          onTogglePinned={() => setSidebarPinned((v) => !v)}
+        />
+        {/* All tabs stay mounted (hidden via CSS, not unmounted) so switching
+            tabs never tears down a live pty, browser session, or editor. */}
+        {tabs.map((t) => {
         const active = t.id === activeTabId
         return (
           <div key={t.id} className="pane-area" style={{ display: active ? 'flex' : 'none' }}>
@@ -425,7 +567,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                 node={t.root}
                 activePaneId={active ? t.activePaneId : ''}
                 shell={config.shell}
-                env={config.env}
+                env={shellEnv}
                 initialCommands={initialCommandsRef.current}
                 onFocusPane={active ? focusPane : () => {}}
                 onResize={active ? resizeSplit : () => {}}
@@ -445,7 +587,15 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
             ) : t.kind === 'scratchpad' ? (
               <ScratchpadTab projectId={projectId} active={active} />
             ) : t.kind === 'deploy' ? (
-              <DeployTab projectId={projectId} config={config} active={active} />
+              <DeployTab
+                projectId={projectId}
+                config={{ ...config, env: shellEnv }}
+                active={active}
+                armed={armed}
+                requestConfirm={requestConfirm}
+                onRunStart={handleDeployRunStart}
+                onRunEnd={handleDeployRunEnd}
+              />
             ) : t.kind === 'ports' ? (
               <PortsTab projectPorts={config.ports} />
             ) : (
@@ -458,7 +608,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                     command={substituteVariables(cmd.command, config)}
                     cwd={config.workingDir}
                     shell={config.shell}
-                    env={config.env}
+                    env={shellEnv}
                     active={active}
                   />
                 )
@@ -466,7 +616,8 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
             )}
           </div>
         )
-      })}
+        })}
+      </div>
     </div>
   )
 }

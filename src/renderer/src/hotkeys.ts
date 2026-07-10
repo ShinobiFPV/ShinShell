@@ -37,7 +37,7 @@ const hotkeyId = (h: ParsedHotkey): string => `${h.ctrl ? 'ctrl+' : ''}${h.shift
 // conflicts are logged to the console (visible via DevTools) rather than
 // blocking config load — the config files are already meant to be
 // human-editable directly (§3).
-const RESERVED = ['ctrl+t', 'ctrl+w', 'ctrl+tab', 'ctrl+\\', 'ctrl+shift+\\']
+const RESERVED = ['ctrl+t', 'ctrl+w', 'ctrl+tab', 'ctrl+\\', 'ctrl+shift+\\', 'ctrl+/']
 
 export function findHotkeyConflicts(config: ProjectConfig): string[] {
   const conflicts: string[] = []

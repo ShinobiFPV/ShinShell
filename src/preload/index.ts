@@ -53,7 +53,9 @@ const api = {
       const listener = (): void => cb()
       ipcRenderer.on(IPC.windowNewTerminalTab, listener)
       return () => ipcRenderer.removeListener(IPC.windowNewTerminalTab, listener)
-    }
+    },
+    setProgress: (progress: number | null): void => ipcRenderer.send(IPC.windowSetProgress, progress),
+    flash: (): void => ipcRenderer.send(IPC.windowFlash)
   },
   commands: {
     runBackground: (opts: BackgroundCommandOptions): void =>

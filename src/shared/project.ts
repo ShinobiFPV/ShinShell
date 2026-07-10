@@ -17,6 +17,10 @@ export interface ProjectCommand {
   command: string
   hotkey?: string
   runIn: CommandRunIn
+  /** UX2 — arm-to-confirm: doesn't fire on the first hotkey press/click, only
+   *  on a second one within the confirm window. See ProjectWindow.tsx's
+   *  `requestConfirm`. */
+  dangerous?: boolean
 }
 
 export interface WatchSyncConfig {
