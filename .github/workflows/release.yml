@@ -18,7 +18,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 20's bundled npm ships a node-gyp too old to find VS2022 on
+          # the windows-latest runner ("Could not find any Visual Studio
+          # installation" rebuilding node-pty) — 22 carries a node-gyp that
+          # detects it fine. Matches what's proven working on the dev
+          # machine (Node 24, same fix, one major newer).
+          node-version: 22
 
       - run: npm ci
 
