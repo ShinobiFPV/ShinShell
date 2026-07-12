@@ -7,6 +7,7 @@ import TerminalView from './components/TerminalView'
 import { MultiplexClient } from './ws/MultiplexClient'
 import type { RemoteHealth, RemoteProject } from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
+import { loadCustomActions, saveCustomActions, type CustomAction } from './localSettings'
 
 const STORAGE_KEY = 'shinshell-remote-pairing'
 const PROJECTS_POLL_MS = 5000
@@ -26,10 +27,76 @@ function wsUrlFor(serverUrl: string): string {
   return `${serverUrl.replace(/^http/, 'ws')}/api/ws`
 }
 
+function QuickActionsEditor({
+  customActions,
+  onChange
+}: {
+  customActions: CustomAction[]
+  onChange: (actions: CustomAction[]) => void
+}): JSX.Element {
+  const [newLabel, setNewLabel] = useState('')
+  const [newValue, setNewValue] = useState('')
+
+  const addAction = (): void => {
+    const label = newLabel.trim()
+    const value = newValue.trim()
+    if (!label || !value) return
+    onChange([...customActions, { id: crypto.randomUUID(), label, value }])
+    setNewLabel('')
+    setNewValue('')
+  }
+
+  const removeAction = (id: string): void => {
+    onChange(customActions.filter((a) => a.id !== id))
+  }
+
+  return (
+    <div class="settings-section">
+      <h3>Quick actions</h3>
+      <p class="settings-note">
+        Extra buttons on the session view, next to Enter/Esc/↑/↓/y/n. Each sends its text followed by
+        Enter.
+      </p>
+      {customActions.length > 0 && (
+        <div class="settings-custom-actions-list">
+          {customActions.map((a) => (
+            <div class="settings-custom-action-row" key={a.id}>
+              <span class="settings-custom-action-label">{a.label}</span>
+              <span class="settings-custom-action-value">{a.value}</span>
+              <button class="settings-custom-action-remove" onClick={() => removeAction(a.id)}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div class="settings-custom-action-add">
+        <input
+          value={newLabel}
+          onInput={(e) => setNewLabel((e.target as HTMLInputElement).value)}
+          placeholder="Label (e.g. 2)"
+        />
+        <input
+          value={newValue}
+          onInput={(e) => setNewValue((e.target as HTMLInputElement).value)}
+          placeholder="Sends (e.g. continue)"
+        />
+        <button onClick={addAction} disabled={!newLabel.trim() || !newValue.trim()}>
+          Add
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SettingsOverlay({
+  customActions,
+  onChangeCustomActions,
   onClose,
   onForget
 }: {
+  customActions: CustomAction[]
+  onChangeCustomActions: (actions: CustomAction[]) => void
   onClose: () => void
   onForget: () => void
 }): JSX.Element {
@@ -66,6 +133,9 @@ function SettingsOverlay({
           iOS: install this app to your Home Screen first (Share → Add to Home Screen) — Safari tabs
           can't receive push notifications.
         </p>
+
+        <QuickActionsEditor customActions={customActions} onChange={onChangeCustomActions} />
+
         <button class="settings-forget" onClick={onForget}>
           Forget this device
         </button>
@@ -94,8 +164,14 @@ export default function App(): JSX.Element {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [customActions, setCustomActionsState] = useState<CustomAction[]>(loadCustomActions)
   const clientRef = useRef<MultiplexClient | null>(null)
   const deepLinkTabId = useRef<string | null>(consumeDeepLinkTabId())
+
+  const setCustomActions = useCallback((actions: CustomAction[]) => {
+    setCustomActionsState(actions)
+    saveCustomActions(actions)
+  }, [])
 
   useEffect(() => {
     if (!pairing) return
@@ -177,13 +253,16 @@ export default function App(): JSX.Element {
     setSettingsOpen(false)
   }, [])
 
-  const openProject = useCallback((projectId: string) => {
-    const project = projects.find((p) => p.id === projectId)
-    if (!project) return
-    const primaryTab = project.tabs.find((t) => t.type === 'claude-code') ?? project.tabs[0] ?? null
-    setActiveTabId(primaryTab?.id ?? null)
-    setScreen('session')
-  }, [projects])
+  const openProject = useCallback(
+    (projectId: string) => {
+      const project = projects.find((p) => p.id === projectId)
+      if (!project) return
+      const primaryTab = project.tabs.find((t) => t.type === 'claude-code') ?? project.tabs[0] ?? null
+      setActiveTabId(primaryTab?.id ?? null)
+      setScreen('session')
+    },
+    [projects]
+  )
 
   const goHome = useCallback(() => {
     setScreen('home')
@@ -232,13 +311,21 @@ export default function App(): JSX.Element {
             client={clientRef.current}
             serverUrl={pairing.serverUrl}
             token={pairing.token}
+            customActions={customActions}
           />
         ) : (
           <div class="app-empty">Select a session above</div>
         )}
       </div>
 
-      {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onForget={forgetDevice} />}
+      {settingsOpen && (
+        <SettingsOverlay
+          customActions={customActions}
+          onChangeCustomActions={setCustomActions}
+          onClose={() => setSettingsOpen(false)}
+          onForget={forgetDevice}
+        />
+      )}
     </div>
   )
 }
