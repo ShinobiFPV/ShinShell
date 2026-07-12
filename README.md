@@ -35,6 +35,18 @@ docs/DEPLOYING.md if you want to force one or ship a new version.
 
 ---
 
+## Screenshots
+
+| Launcher | Terminal |
+|---|---|
+| ![Project launcher](docs/screenshots/01-launcher.png) | ![Terminal tab](docs/screenshots/02-terminal.png) |
+
+| Command palette | Editor |
+|---|---|
+| ![Command palette](docs/screenshots/03-command-palette.png) | ![Monaco editor tab](docs/screenshots/04-editor.png) |
+
+---
+
 ## The pitch
 
 Every open project gets its **own OS window**, tinted with that project's accent
