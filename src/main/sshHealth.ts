@@ -12,6 +12,13 @@ interface Subscription {
 }
 
 const subscriptions = new Map<string, Subscription>()
+// § ShinShell Remote — last known status per project, independent of the
+// desktop-window subscription above, so GET /api/projects can read a
+// health value without pushing an IPC frame anywhere. Populated by the same
+// runCheck() the desktop's SshHealthLight subscription already drives (that
+// dot mounts for every open project window per the top-bar contract, so in
+// practice this cache is warm for every project Remote would ever list).
+const lastStatus = new Map<string, SshHealthStatus>()
 
 function checkTcp(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -46,20 +53,24 @@ async function runCheck(projectId: string): Promise<void> {
   const target = primaryTarget(projectId)
   if (!target) return
 
-  sub.win.webContents.send(IPC.sshHealthStatus, {
-    projectId,
-    state: 'checking',
-    lastCheckedAt: null
-  } satisfies SshHealthStatus)
+  const checking: SshHealthStatus = { projectId, state: 'checking', lastCheckedAt: null }
+  lastStatus.set(projectId, checking)
+  sub.win.webContents.send(IPC.sshHealthStatus, checking)
 
   const ok = await checkTcp(target.host, target.port)
+  const result: SshHealthStatus = { projectId, state: ok ? 'up' : 'down', lastCheckedAt: Date.now() }
+  lastStatus.set(projectId, result)
   const current = subscriptions.get(projectId)
   if (!current || current.win.isDestroyed()) return
-  current.win.webContents.send(IPC.sshHealthStatus, {
-    projectId,
-    state: ok ? 'up' : 'down',
-    lastCheckedAt: Date.now()
-  } satisfies SshHealthStatus)
+  current.win.webContents.send(IPC.sshHealthStatus, result)
+}
+
+/** § ShinShell Remote — GET /api/projects reads this instead of subscribing
+ *  (a REST poller has no BrowserWindow to push IPC frames to). Null means
+ *  no check has run yet for this project (window just opened) or it has no
+ *  targets at all. */
+export function getCachedHealth(projectId: string): SshHealthStatus | null {
+  return lastStatus.get(projectId) ?? null
 }
 
 export function subscribeSshHealth(win: BrowserWindow, projectId: string): void {
@@ -74,4 +85,5 @@ export function unsubscribeSshHealth(projectId: string): void {
   if (!sub) return
   clearInterval(sub.timer)
   subscriptions.delete(projectId)
+  lastStatus.delete(projectId)
 }

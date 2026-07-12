@@ -1,14 +1,17 @@
 import type { JSX } from 'preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import PairingScreen, { type Pairing } from './components/PairingScreen'
+import Dashboard from './components/Dashboard'
 import SessionList from './components/SessionList'
 import TerminalView from './components/TerminalView'
 import { MultiplexClient } from './ws/MultiplexClient'
-import type { RemoteProject } from './ws/protocol'
+import type { RemoteHealth, RemoteProject } from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
 
 const STORAGE_KEY = 'shinshell-remote-pairing'
 const PROJECTS_POLL_MS = 5000
+
+type Screen = 'home' | 'session'
 
 function loadPairing(): Pairing | null {
   try {
@@ -72,13 +75,27 @@ function SettingsOverlay({
   )
 }
 
+/** Pulls `?tab=<sessionId>` off the URL (set by the SW's notificationclick
+ *  handler — see sw.ts) exactly once per load, then scrubs it so a refresh
+ *  or the browser's own back button doesn't keep re-jumping into that
+ *  session. Returns null once consumed or if it was never present. */
+function consumeDeepLinkTabId(): string | null {
+  const params = new URLSearchParams(location.search)
+  const tabId = params.get('tab')
+  if (tabId) history.replaceState(null, '', location.pathname)
+  return tabId
+}
+
 export default function App(): JSX.Element {
   const [pairing, setPairing] = useState<Pairing | null>(loadPairing)
   const [projects, setProjects] = useState<RemoteProject[]>([])
+  const [health, setHealth] = useState<RemoteHealth | null>(null)
+  const [screen, setScreen] = useState<Screen>('home')
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const clientRef = useRef<MultiplexClient | null>(null)
+  const deepLinkTabId = useRef<string | null>(consumeDeepLinkTabId())
 
   useEffect(() => {
     if (!pairing) return
@@ -107,12 +124,43 @@ export default function App(): JSX.Element {
     }
   }, [pairing])
 
+  const refreshHealth = useCallback(async () => {
+    if (!pairing) return
+    try {
+      const res = await fetch(`${pairing.serverUrl}/api/health`)
+      if (!res.ok) {
+        setHealth(null)
+        return
+      }
+      setHealth((await res.json()) as RemoteHealth)
+    } catch {
+      setHealth(null)
+    }
+  }, [pairing])
+
   useEffect(() => {
     if (!pairing) return
     refreshProjects()
-    const timer = setInterval(refreshProjects, PROJECTS_POLL_MS)
+    refreshHealth()
+    const timer = setInterval(() => {
+      refreshProjects()
+      refreshHealth()
+    }, PROJECTS_POLL_MS)
     return () => clearInterval(timer)
-  }, [pairing, refreshProjects])
+  }, [pairing, refreshProjects, refreshHealth])
+
+  // Jump straight into a session view once the deep-linked tab actually
+  // shows up in a poll (it may not be there yet on the very first response
+  // right after a cold app launch woken by the notification itself).
+  useEffect(() => {
+    const tabId = deepLinkTabId.current
+    if (!tabId) return
+    const owningProject = projects.find((p) => p.tabs.some((t) => t.id === tabId))
+    if (!owningProject) return
+    deepLinkTabId.current = null
+    setActiveTabId(tabId)
+    setScreen('session')
+  }, [projects])
 
   const handlePaired = useCallback((p: Pairing) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
@@ -123,21 +171,49 @@ export default function App(): JSX.Element {
     localStorage.removeItem(STORAGE_KEY)
     setPairing(null)
     setProjects([])
+    setHealth(null)
+    setScreen('home')
     setActiveTabId(null)
     setSettingsOpen(false)
+  }, [])
+
+  const openProject = useCallback((projectId: string) => {
+    const project = projects.find((p) => p.id === projectId)
+    if (!project) return
+    const primaryTab = project.tabs.find((t) => t.type === 'claude-code') ?? project.tabs[0] ?? null
+    setActiveTabId(primaryTab?.id ?? null)
+    setScreen('session')
+  }, [projects])
+
+  const goHome = useCallback(() => {
+    setScreen('home')
+    setActiveTabId(null)
   }, [])
 
   if (!pairing) {
     return <PairingScreen onPaired={handlePaired} />
   }
 
-  const allTabs = projects.flatMap((p) => p.tabs.map((t) => ({ ...t, project: p })))
-  const activeTab = allTabs.find((t) => t.id === activeTabId) ?? null
+  const selectedProject = projects.find((p) => p.tabs.some((t) => t.id === activeTabId)) ?? null
+  const activeTab = selectedProject?.tabs.find((t) => t.id === activeTabId) ?? null
 
   return (
     <div class="app">
       <div class="app-topbar">
-        <SessionList projects={projects} activeTabId={activeTabId} onSelect={setActiveTabId} />
+        {screen === 'session' ? (
+          <>
+            <button class="app-back-btn" onClick={goHome} title="Back to dashboard">
+              ←
+            </button>
+            <SessionList
+              projects={selectedProject ? [selectedProject] : []}
+              activeTabId={activeTabId}
+              onSelect={setActiveTabId}
+            />
+          </>
+        ) : (
+          <div class="app-topbar-title">ShinShell Remote</div>
+        )}
         <button class="app-settings-btn" onClick={() => setSettingsOpen(true)} title="Settings">
           ⚙
         </button>
@@ -146,7 +222,9 @@ export default function App(): JSX.Element {
       {!connected && <div class="offline-banner">Reconnecting to ShinShell…</div>}
 
       <div class="app-main">
-        {activeTab && clientRef.current ? (
+        {screen === 'home' ? (
+          <Dashboard projects={projects} health={health} onSelectProject={openProject} />
+        ) : activeTab && clientRef.current ? (
           <TerminalView
             key={activeTab.id}
             tabId={activeTab.id}

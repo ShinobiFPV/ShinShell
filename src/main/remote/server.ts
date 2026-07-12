@@ -6,6 +6,7 @@
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'https'
 import { readFileSync, existsSync } from 'fs'
 import { join, basename } from 'path'
+import { hostname } from 'os'
 import express, { type Request, type Response, type NextFunction } from 'express'
 import { WebSocketServer, WebSocket } from 'ws'
 import { app as electronApp } from 'electron'
@@ -14,10 +15,12 @@ import { loadRemoteState, saveRemoteState, type PushSubscriptionJson } from './s
 import { verifyToken, submitPin, type PairResult } from './pairing'
 import { ensureVapid, getVapidPublicKey, notifyAllDevices } from './push'
 import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents } from '../pty'
-import { waitEvents, getStatus as getWaitStatus } from './waitDetector'
+import { waitEvents, getStatus as getWaitStatus, getStateSince, type WaitStatus } from './waitDetector'
+import { stripAnsi } from './ansi'
 import { listOpenProjectIds, getProjectIdForWindow } from '../windows'
 import { getProject } from '../projects'
-import type { RemoteStatus, PtyDataEvent, PtyExitEvent } from '../../shared/ipc'
+import { getCachedHealth } from '../sshHealth'
+import type { RemoteStatus, PtyDataEvent, PtyExitEvent, SshHealthStatus } from '../../shared/ipc'
 
 const PORT = 8443
 const CERT_RENEW_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -73,6 +76,54 @@ function inputAllowed(tabId: string): boolean {
   return loadRemoteState().allowFullTerminalInput
 }
 
+/** § Mission Control (§1) — last few non-blank lines of a claude-code tab's
+ *  scrollback, so a project card can show "roughly what Claude just said"
+ *  without the phone opening the session view. */
+function lastNonBlankLines(text: string, count: number): string[] {
+  const lines = stripAnsi(text)
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter(Boolean)
+  return lines.slice(-count)
+}
+
+const STATE_PRIORITY: Record<WaitStatus, number> = { waiting: 0, busy: 1, idle: 2 }
+
+interface ProjectAggregate {
+  state: WaitStatus
+  stateSince: number
+  lastLines: string[]
+}
+
+/** § Mission Control (§1) — one card per project needs a single state, not
+ *  one per claude-code tab. Picks the most urgent status across the
+ *  project's claude-code tabs (waiting beats busy beats idle); ties broken
+ *  by whichever has been in that status longest, since "been waiting
+ *  longest" is the more useful signal than "most recently changed" for a
+ *  glance-and-decide card. A project with no claude-code tab at all reads
+ *  as idle with no lines, rather than some fourth "none" state the UI would
+ *  have to special-case. */
+function aggregateProjectState(claudeTabIds: string[]): ProjectAggregate {
+  if (claudeTabIds.length === 0) return { state: 'idle', stateSince: Date.now(), lastLines: [] }
+
+  let winnerId = claudeTabIds[0]
+  let winnerState = getWaitStatus(winnerId)
+  let winnerSince = getStateSince(winnerId)
+  for (const id of claudeTabIds.slice(1)) {
+    const state = getWaitStatus(id)
+    const since = getStateSince(id)
+    const better =
+      STATE_PRIORITY[state] < STATE_PRIORITY[winnerState] ||
+      (STATE_PRIORITY[state] === STATE_PRIORITY[winnerState] && since < winnerSince)
+    if (better) {
+      winnerId = id
+      winnerState = state
+      winnerSince = since
+    }
+  }
+  return { state: winnerState, stateSince: winnerSince, lastLines: lastNonBlankLines(getScrollback(winnerId), 2) }
+}
+
 function getPwaDistDir(): string {
   return electronApp.isPackaged
     ? join(process.resourcesPath, 'remote')
@@ -104,7 +155,8 @@ function buildApp(): express.Express {
     res.json({
       version: electronApp.getVersion(),
       uptime: process.uptime(),
-      projectCount: listOpenProjectIds().length
+      projectCount: listOpenProjectIds().length,
+      hostname: hostname()
     })
   })
 
@@ -146,7 +198,23 @@ function buildApp(): express.Express {
             title: s.meta!.tabKind === 'claude-code' ? 'Claude Code' : basename(s.meta!.cwd),
             state: s.meta!.tabKind === 'claude-code' ? getWaitStatus(s.id) : undefined
           }))
-        return { id: projectId, name: config.name, accentColor: config.accentColor, tabs }
+        const claudeTabIds = tabs.filter((t) => t.type === 'claude-code').map((t) => t.id)
+        const aggregate = aggregateProjectState(claudeTabIds)
+        const health: SshHealthStatus = getCachedHealth(projectId) ?? {
+          projectId,
+          state: 'unknown',
+          lastCheckedAt: null
+        }
+        return {
+          id: projectId,
+          name: config.name,
+          accentColor: config.accentColor,
+          tabs,
+          state: aggregate.state,
+          stateSince: aggregate.stateSince,
+          lastLines: aggregate.lastLines,
+          sshHealth: { state: health.state, lastCheckedAt: health.lastCheckedAt }
+        }
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)
     res.json({ projects })

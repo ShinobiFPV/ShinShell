@@ -24,6 +24,7 @@ const PROMPT_PATTERNS: RegExp[] = [
 
 interface SessionState {
   status: WaitStatus
+  since: number
   tail: string
   bellSeen: boolean
   quietTimer: ReturnType<typeof setTimeout> | null
@@ -39,6 +40,7 @@ export const waitEvents = new EventEmitter()
 function setStatus(id: string, st: SessionState, next: WaitStatus): void {
   if (st.status === next) return
   st.status = next
+  st.since = Date.now()
   waitEvents.emit('state', { id, status: next })
 }
 
@@ -48,7 +50,7 @@ function setStatus(id: string, st: SessionState, next: WaitStatus): void {
 export function onPtyChunk(id: string, chunk: string): void {
   let st = states.get(id)
   if (!st) {
-    st = { status: 'busy', tail: '', bellSeen: false, quietTimer: null }
+    st = { status: 'busy', since: Date.now(), tail: '', bellSeen: false, quietTimer: null }
     states.set(id, st)
   }
   st.tail = (st.tail + chunk).slice(-TAIL_CAP)
@@ -79,6 +81,14 @@ function classifyQuiet(id: string): void {
 
 export function getStatus(id: string): WaitStatus {
   return states.get(id)?.status ?? 'idle'
+}
+
+/** § ShinShell Remote — epoch ms the session entered its current status,
+ *  for Mission Control's "time-in-state" (§1). Falls back to now for a
+ *  session with no recorded state yet, so a fresh card reads "0s" instead
+ *  of NaN rather than needing a null-check at every call site. */
+export function getStateSince(id: string): number {
+  return states.get(id)?.since ?? Date.now()
 }
 
 /** Called on pty exit (see pty.ts's ptyEvents 'exit') so a closed session's

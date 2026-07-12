@@ -1,0 +1,85 @@
+import type { JSX } from 'preact'
+import type { RemoteHealth, RemoteProject } from '../ws/protocol'
+import { formatDuration } from '../util/time'
+
+interface DashboardProps {
+  projects: RemoteProject[]
+  health: RemoteHealth | null
+  onSelectProject: (projectId: string) => void
+}
+
+const STATE_LABEL: Record<RemoteProject['state'], string> = {
+  waiting: 'WAITING',
+  busy: 'BUSY',
+  idle: 'IDLE'
+}
+
+const SSH_LABEL: Record<string, string> = {
+  up: 'SSH ok',
+  down: 'SSH down',
+  checking: 'SSH checking…',
+  unknown: 'SSH unknown'
+}
+
+// § Mission Control (§1) — the app's home screen: one card per project open
+// on ShinShell, colored in that project's accent, so a glance (ideally just
+// the lock-screen notification, but this is what it opens into) is often
+// enough to decide whether to actually pick up the phone. Polled from
+// GET /api/projects/​/api/health at app.tsx's PROJECTS_POLL_MS — no live WS
+// subscription per card (see SessionList's note on why that'd be wasteful
+// for chips nobody's actively viewing).
+export default function Dashboard({ projects, health, onSelectProject }: DashboardProps): JSX.Element {
+  return (
+    <div class="dashboard">
+      <div class="dashboard-grid">
+        {projects.length === 0 && (
+          <div class="dashboard-empty">No projects open on ShinShell right now.</div>
+        )}
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            class="project-card"
+            style={{ '--card-accent': p.accentColor } as Record<string, string>}
+            onClick={() => onSelectProject(p.id)}
+          >
+            <div class="project-card-header">
+              <span class="project-card-name">{p.name}</span>
+              <span class={`project-card-state-dot project-card-state-${p.state}`} />
+            </div>
+            <div class="project-card-state-row">
+              <span class={`project-card-state-label project-card-state-label-${p.state}`}>
+                {STATE_LABEL[p.state]}
+              </span>
+              <span class="project-card-time">{formatDuration(p.stateSince)}</span>
+            </div>
+            <div class="project-card-lines">
+              {p.lastLines.length === 0 ? (
+                <span class="project-card-lines-empty">No Claude Code session</span>
+              ) : (
+                p.lastLines.map((line, i) => (
+                  <div class="project-card-line" key={i}>
+                    {line}
+                  </div>
+                ))
+              )}
+            </div>
+            <div class="project-card-footer">
+              <span class={`ssh-dot ssh-dot-${p.sshHealth.state}`} />
+              <span class="project-card-ssh-label">{SSH_LABEL[p.sshHealth.state]}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div class="dashboard-footer">
+        {health ? (
+          <span>
+            ShinShell v{health.version} · up {formatDuration(Date.now() - health.uptime * 1000)} ·{' '}
+            {health.hostname}
+          </span>
+        ) : (
+          <span class="dashboard-footer-offline">ShinShell unreachable</span>
+        )}
+      </div>
+    </div>
+  )
+}
