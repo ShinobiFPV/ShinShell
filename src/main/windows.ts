@@ -223,6 +223,15 @@ export function listOpenProjectIds(): string[] {
   return [...projectWindows.keys()]
 }
 
+/** § remote deploy (§5) — a remote-triggered deploy spawns via the same
+ *  pty.spawnPty(win, ...) the desktop uses, which needs a real BrowserWindow
+ *  to attribute the session's IPC events to. Null if the project isn't
+ *  open — the run endpoint treats that as "nothing to deploy against." */
+export function getOpenProjectWindow(projectId: string): BrowserWindow | null {
+  const win = projectWindows.get(projectId)
+  return win && !win.isDestroyed() ? win : null
+}
+
 export function getProjectIdByIndex(index: number): string | undefined {
   // 1-based, matches Ctrl+Alt+1..9 (§8) — ordering follows listProjects()'s
   // sort (by name), same order the launcher grid shows them in.

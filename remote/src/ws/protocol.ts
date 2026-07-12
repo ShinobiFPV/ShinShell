@@ -27,9 +27,19 @@ export type ServerFrame =
 // they're simply absent — there's nothing to stream).
 export interface RemoteTab {
   id: string
-  type: 'terminal' | 'claude-code' | 'log-tail'
+  type: 'terminal' | 'claude-code' | 'log-tail' | 'deploy'
   title: string
   state?: WaitStatus
+}
+
+// § remote deploy (§5) — `command` is the fully-substituted string (real
+// hostnames/paths) so the phone's arm-to-confirm countdown can show exactly
+// what's about to fire, per the plan's requirement.
+export interface RemoteDeployCommand {
+  id: string
+  label: string
+  dangerous: boolean
+  command: string
 }
 
 export type SshHealthState = 'checking' | 'up' | 'down' | 'unknown'
@@ -53,6 +63,16 @@ export interface RemoteProject {
   stateSince: number
   lastLines: string[]
   sshHealth: RemoteSshHealth
+  /** § remote deploy (§5) — absent (not just empty) while remote.allowDeploy
+   *  is off; see server.ts's GET /api/projects. */
+  deployCommands?: RemoteDeployCommand[]
+}
+
+// § remote deploy (§5) — GET /api/projects's response envelope.
+export interface RemoteProjectsResponse {
+  projects: RemoteProject[]
+  allowFullTerminalInput: boolean
+  allowDeploy: boolean
 }
 
 // § actionable notifications (§3) — per-device push prefs, mirrors

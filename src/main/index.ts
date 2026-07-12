@@ -222,6 +222,11 @@ function registerIpc(): void {
     state.allowFullTerminalInput = allow
     saveRemoteState(state)
   })
+  ipcMain.on(IPC.remoteSetAllowDeploy, (_event, allow: boolean) => {
+    const state = loadRemoteState()
+    state.allowDeploy = allow
+    saveRemoteState(state)
+  })
   ipcMain.handle(IPC.remoteTestNotification, () => sendTestNotification())
   ipcMain.handle(IPC.remoteGetQrDataUrl, async (): Promise<string | null> => {
     const status = getRemoteStatus()

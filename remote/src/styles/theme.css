@@ -150,6 +150,35 @@ input {
   border: 1px solid color-mix(in srgb, var(--card-accent) 35%, #2a2e35);
   border-left: 3px solid var(--card-accent);
   background: color-mix(in srgb, var(--card-accent) 6%, #14171b);
+  cursor: pointer;
+}
+
+.project-card-deploy-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.deploy-btn {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-color: color-mix(in srgb, var(--card-accent) 45%, #2a2e35);
+}
+
+.deploy-btn-dangerous {
+  color: #ffb400;
+  border-color: #4a3a10;
+}
+
+.deploy-btn-armed {
+  --arm-accent: #ffb400;
+  color: #06110a;
+  background: var(--arm-accent);
+  border-color: var(--arm-accent);
+  font-weight: 700;
+  animation: pulse-grow 1s ease-in-out infinite;
 }
 
 .project-card-header {

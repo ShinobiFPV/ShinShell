@@ -174,6 +174,7 @@ const api = {
     getPairedDevices: (): Promise<RemoteDevice[]> => ipcRenderer.invoke(IPC.remoteGetPairedDevices),
     revokeDevice: (id: string): void => ipcRenderer.send(IPC.remoteRevokeDevice, id),
     setAllowFullInput: (allow: boolean): void => ipcRenderer.send(IPC.remoteSetAllowFullInput, allow),
+    setAllowDeploy: (allow: boolean): void => ipcRenderer.send(IPC.remoteSetAllowDeploy, allow),
     testNotification: (): Promise<void> => ipcRenderer.invoke(IPC.remoteTestNotification),
     getQrDataUrl: (): Promise<string | null> => ipcRenderer.invoke(IPC.remoteGetQrDataUrl),
     onStatus: (cb: (status: RemoteStatus) => void): (() => void) => {

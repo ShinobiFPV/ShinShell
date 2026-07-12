@@ -20,7 +20,7 @@ interface Session {
   proc: pty.IPty
   windowId: number
   cwd: string
-  tabKind?: 'terminal' | 'claude-code' | 'log-tail'
+  tabKind?: 'terminal' | 'claude-code' | 'log-tail' | 'deploy'
   label?: string
   scrollback: string
 }
@@ -114,7 +114,9 @@ export function getScrollback(id: string): string {
  *  server core: input is claude-code-only unless allowFullTerminalInput). */
 export function getSessionMeta(
   id: string
-): { windowId: number; cwd: string; tabKind?: 'terminal' | 'claude-code' | 'log-tail'; label?: string } | undefined {
+):
+  | { windowId: number; cwd: string; tabKind?: 'terminal' | 'claude-code' | 'log-tail' | 'deploy'; label?: string }
+  | undefined {
   const session = sessions.get(id)
   return (
     session && { windowId: session.windowId, cwd: session.cwd, tabKind: session.tabKind, label: session.label }

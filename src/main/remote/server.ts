@@ -14,13 +14,16 @@ import { getTailscaleSelf, issueCert, type TailscaleSelf } from './tailscale'
 import { loadRemoteState, saveRemoteState, type PushSubscriptionJson, type QuietHours } from './state'
 import { verifyToken, submitPin, type PairResult } from './pairing'
 import { ensureVapid, getVapidPublicKey, notifyAllDevices } from './push'
-import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents } from '../pty'
+import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents, spawnPty } from '../pty'
 import { waitEvents, getStatus as getWaitStatus, getStateSince, type WaitStatus } from './waitDetector'
 import { stripAnsi } from './ansi'
-import { listOpenProjectIds, getProjectIdForWindow } from '../windows'
+import { listOpenProjectIds, getProjectIdForWindow, getOpenProjectWindow } from '../windows'
 import { getProject } from '../projects'
 import { getCachedHealth } from '../sshHealth'
-import type { RemoteStatus, PtyDataEvent, PtyExitEvent, SshHealthStatus } from '../../shared/ipc'
+import { validateProjectPath } from '../projectValidation'
+import { substituteVariables } from '../../shared/commandSubstitution'
+import { appendDeployRun } from '../deployHistory'
+import type { RemoteStatus, PtyDataEvent, PtyExitEvent, SshHealthStatus, DeployRun } from '../../shared/ipc'
 
 const PORT = 8443
 const CERT_RENEW_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -71,6 +74,11 @@ function inputAllowed(tabId: string): boolean {
   const meta = getSessionMeta(tabId)
   if (!meta) return false
   if (meta.tabKind === 'claude-code') return true
+  // § remote deploy (§5) — a deploy run is a one-shot command, not an
+  // interactive session; it never accepts input, even under
+  // allowFullTerminalInput (that toggle is about typing into a shell, not
+  // about steering a deploy that's already running).
+  if (meta.tabKind === 'deploy') return false
   return loadRemoteState().allowFullTerminalInput
 }
 
@@ -147,6 +155,28 @@ function clockToQuietHours(body: unknown): QuietHours | null {
   const endMinute = clockMinutes(end)
   if (startMinute === null || endMinute === null) return null
   return { startMinute, endMinute }
+}
+
+/** § remote deploy (§5) — the exact same command set the desktop's own
+ *  Deploy tab exposes (DeployTab.tsx filters on this same id prefix), so
+ *  there's never drift between "what the desktop Deploy tab can run" and
+ *  "what a paired phone can trigger." `command` is the fully-substituted
+ *  string (real hostnames, real paths) so the phone's arm-to-confirm
+ *  countdown can show exactly what will fire, per the plan's requirement. */
+function deployCommandsFor(config: NonNullable<ReturnType<typeof getProject>>): {
+  id: string
+  label: string
+  dangerous: boolean
+  command: string
+}[] {
+  return config.commands
+    .filter((c) => c.id.startsWith('deploy'))
+    .map((c) => ({
+      id: c.id,
+      label: c.label,
+      dangerous: Boolean(c.dangerous),
+      command: substituteVariables(c.command, config)
+    }))
 }
 
 function getPwaDistDir(): string {
@@ -230,6 +260,7 @@ function buildApp(): express.Express {
           state: 'unknown',
           lastCheckedAt: null
         }
+        const remoteState = loadRemoteState()
         return {
           id: projectId,
           name: config.name,
@@ -238,15 +269,99 @@ function buildApp(): express.Express {
           state: aggregate.state,
           stateSince: aggregate.stateSince,
           lastLines: aggregate.lastLines,
-          sshHealth: { state: health.state, lastCheckedAt: health.lastCheckedAt }
+          sshHealth: { state: health.state, lastCheckedAt: health.lastCheckedAt },
+          // § remote deploy (§5) — opt-in: omitted entirely (not just
+          // empty) while the toggle is off, so a stolen device token
+          // doesn't even learn a project's deploy command set.
+          deployCommands: remoteState.allowDeploy ? deployCommandsFor(config) : undefined
         }
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)
-    // § read-only visibility (§4) — allowFullTerminalInput travels with the
-    // list rather than needing its own endpoint: it's the one bit the PWA
-    // needs to decide whether a non-claude-code tab's input bar should show
-    // at all (see TerminalView's `allowInput` prop in the PWA).
-    res.json({ projects, allowFullTerminalInput: loadRemoteState().allowFullTerminalInput })
+    // § read-only visibility (§4) / § remote deploy (§5) — both flags
+    // travel with the list rather than needing their own endpoints: they're
+    // the bits the PWA needs to decide whether a tab's input bar, or a
+    // card's deploy buttons, should show at all.
+    const remoteState = loadRemoteState()
+    res.json({
+      projects,
+      allowFullTerminalInput: remoteState.allowFullTerminalInput,
+      allowDeploy: remoteState.allowDeploy
+    })
+  })
+
+  // § remote deploy (§5) — stateless by design: arm-to-confirm for
+  // `dangerous` commands is a client-side (phone UI) gate, exactly like the
+  // desktop's own requestConfirm()/ArmedCommandBanner — the desktop doesn't
+  // ask the main process to track "armed" state either, so this endpoint
+  // just runs the command the instant it's called, same trust boundary as
+  // every other authenticated Remote request.
+  expressApp.post('/api/projects/:projectId/commands/:commandId/run', (req, res) => {
+    if (!loadRemoteState().allowDeploy) {
+      res.status(403).json({ error: 'remote deploy is not enabled' })
+      return
+    }
+    const { projectId, commandId } = req.params
+    if (!listOpenProjectIds().includes(projectId)) {
+      res.status(404).json({ error: 'project not open' })
+      return
+    }
+    const config = getProject(projectId)
+    if (!config) {
+      res.status(404).json({ error: 'project not found' })
+      return
+    }
+    const command = deployCommandsFor(config).find((c) => c.id === commandId)
+    if (!command) {
+      res.status(404).json({ error: 'command not found' })
+      return
+    }
+    const pathCheck = validateProjectPath(config.workingDir)
+    if (!pathCheck.valid) {
+      res.status(409).json({ error: pathCheck.reason ?? 'project folder not found' })
+      return
+    }
+    const win = getOpenProjectWindow(projectId)
+    if (!win) {
+      res.status(404).json({ error: 'project window not open' })
+      return
+    }
+
+    const runId = `remote-deploy-${projectId}-${Date.now()}`
+    const startedAt = Date.now()
+    spawnPty(win, {
+      id: runId,
+      cwd: config.workingDir,
+      cols: 120,
+      rows: 40,
+      shell: config.shell,
+      env: config.env,
+      oneShotCommand: command.command,
+      tabKind: 'deploy',
+      label: command.label
+    })
+
+    const onExit = (e: PtyExitEvent): void => {
+      if (e.id !== runId) return
+      ptyEvents.off('exit', onExit)
+      const run: DeployRun = {
+        commandId: command.id,
+        commandLabel: command.label,
+        startedAt,
+        durationMs: Date.now() - startedAt,
+        exitCode: e.exitCode
+      }
+      appendDeployRun(projectId, run)
+      const ok = e.exitCode === 0
+      void notifyAllDevices({
+        title: `${config.name}: deploy ${ok ? 'succeeded' : 'failed'}`,
+        body: `${command.label} — exit ${e.exitCode}, ${(run.durationMs / 1000).toFixed(1)}s`,
+        sessionId: runId,
+        projectId
+      })
+    }
+    ptyEvents.on('exit', onExit)
+
+    res.json({ ok: true, runId })
   })
 
   expressApp.post('/api/tabs/:id/keys', (req, res) => {
@@ -577,7 +692,8 @@ export function getRemoteStatus(): RemoteStatus {
     error: lastError,
     pairedDeviceCount: state.devices.length,
     pendingPin: pinLive ? state.pendingPin!.pin : null,
-    allowFullTerminalInput: state.allowFullTerminalInput
+    allowFullTerminalInput: state.allowFullTerminalInput,
+    allowDeploy: state.allowDeploy
   }
 }
 

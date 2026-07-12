@@ -5,7 +5,7 @@ import Dashboard from './components/Dashboard'
 import SessionList from './components/SessionList'
 import TerminalView from './components/TerminalView'
 import { MultiplexClient } from './ws/MultiplexClient'
-import type { NotificationSettings, RemoteHealth, RemoteProject } from './ws/protocol'
+import type { NotificationSettings, RemoteHealth, RemoteProject, RemoteProjectsResponse } from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
 import { loadCustomActions, saveCustomActions, type CustomAction } from './localSettings'
 import { idbSet, idbDelete } from './idb'
@@ -270,6 +270,7 @@ export default function App(): JSX.Element {
   const [pairing, setPairing] = useState<Pairing | null>(loadPairing)
   const [projects, setProjects] = useState<RemoteProject[]>([])
   const [allowFullTerminalInput, setAllowFullTerminalInput] = useState(false)
+  const [allowDeploy, setAllowDeploy] = useState(false)
   const [health, setHealth] = useState<RemoteHealth | null>(null)
   const [screen, setScreen] = useState<Screen>('home')
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
@@ -312,9 +313,10 @@ export default function App(): JSX.Element {
         headers: { Authorization: `Bearer ${pairing.token}` }
       })
       if (!res.ok) return
-      const body = (await res.json()) as { projects: RemoteProject[]; allowFullTerminalInput: boolean }
+      const body = (await res.json()) as RemoteProjectsResponse
       setProjects(body.projects)
       setAllowFullTerminalInput(body.allowFullTerminalInput)
+      setAllowDeploy(body.allowDeploy)
     } catch {
       // offline — the "ShinShell is offline" banner below already covers this
     }
@@ -384,6 +386,30 @@ export default function App(): JSX.Element {
     [projects]
   )
 
+  // § remote deploy (§5) — the pty spawn already happened server-side by
+  // the time this POST resolves, so a single refreshProjects() afterward is
+  // guaranteed (not just likely) to pick up the new 'deploy' tab — no race
+  // to paper over with a synthesized local placeholder.
+  const runDeployCommand = useCallback(
+    async (projectId: string, commandId: string) => {
+      if (!pairing) return
+      try {
+        const res = await fetch(`${pairing.serverUrl}/api/projects/${projectId}/commands/${commandId}/run`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${pairing.token}` }
+        })
+        if (!res.ok) return
+        const body = (await res.json()) as { runId: string }
+        await refreshProjects()
+        setActiveTabId(body.runId)
+        setScreen('session')
+      } catch {
+        // offline — the "ShinShell is offline" banner already covers this
+      }
+    },
+    [pairing, refreshProjects]
+  )
+
   const goHome = useCallback(() => {
     setScreen('home')
     setActiveTabId(null)
@@ -423,12 +449,18 @@ export default function App(): JSX.Element {
 
       <div class="app-main">
         {screen === 'home' ? (
-          <Dashboard projects={projects} health={health} onSelectProject={openProject} />
+          <Dashboard
+            projects={projects}
+            health={health}
+            onSelectProject={openProject}
+            allowDeploy={allowDeploy}
+            onRunDeployCommand={runDeployCommand}
+          />
         ) : activeTab && clientRef.current ? (
           <TerminalView
             key={activeTab.id}
             tabId={activeTab.id}
-            allowInput={activeTab.type === 'claude-code' || allowFullTerminalInput}
+            allowInput={activeTab.type === 'claude-code' || (allowFullTerminalInput && activeTab.type !== 'deploy')}
             client={clientRef.current}
             serverUrl={pairing.serverUrl}
             token={pairing.token}

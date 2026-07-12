@@ -56,13 +56,27 @@ export interface VapidKeys {
 export interface RemoteState {
   enabled: boolean
   allowFullTerminalInput: boolean
+  /** § remote deploy (§5) — off by default; gates both whether GET
+   *  /api/projects even advertises a project's deploy commands and whether
+   *  the run endpoint accepts a trigger. A separate flag from
+   *  allowFullTerminalInput because "let my phone see and fire deploy
+   *  commands" is a materially different risk than "let my phone type into
+   *  a shell." */
+  allowDeploy: boolean
   vapid: VapidKeys | null
   devices: RemoteDeviceRecord[]
   pendingPin: PendingPin | null
 }
 
 function defaultState(): RemoteState {
-  return { enabled: false, allowFullTerminalInput: false, vapid: null, devices: [], pendingPin: null }
+  return {
+    enabled: false,
+    allowFullTerminalInput: false,
+    allowDeploy: false,
+    vapid: null,
+    devices: [],
+    pendingPin: null
+  }
 }
 
 const remoteStatePath = (): string => join(app.getPath('userData'), 'remote.json')

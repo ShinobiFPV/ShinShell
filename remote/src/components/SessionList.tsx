@@ -33,7 +33,10 @@ export default function SessionList({
   return (
     <div class="session-list">
       {chips.map(({ project, tab }) => {
-        const viewOnly = tab.type !== 'claude-code' && !allowFullTerminalInput
+        // 'deploy' runs are never input-eligible, full-terminal-input toggle
+        // or not (see server.ts's inputAllowed) — keep this in sync with
+        // app.tsx's allowInput computation for TerminalView.
+        const viewOnly = tab.type !== 'claude-code' && (tab.type === 'deploy' || !allowFullTerminalInput)
         return (
           <button
             key={tab.id}

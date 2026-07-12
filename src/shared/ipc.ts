@@ -61,6 +61,7 @@ export const IPC = {
   remoteGetPairedDevices: 'remote:getPairedDevices',
   remoteRevokeDevice: 'remote:revokeDevice',
   remoteSetAllowFullInput: 'remote:setAllowFullInput',
+  remoteSetAllowDeploy: 'remote:setAllowDeploy',
   remoteTestNotification: 'remote:testNotification',
   remoteGetQrDataUrl: 'remote:getQrDataUrl',
   remoteStatus: 'remote:status',
@@ -81,12 +82,13 @@ export interface PtySpawnOptions {
    *  so the pty's exit code is the command's own — used by the deploy tab
    *  (§6.7) to record real exit codes in history. */
   oneShotCommand?: string
-  /** 'terminal' | 'claude-code' | 'log-tail' — tags the session so
-   *  ShinShell Remote can scope its waiting-for-input heuristic to
-   *  claude-code panes only, and (§ read-only visibility) list every
-   *  pty-backed tab kind — not just claude-code — as a view-only session on
-   *  the phone. Absent for one-shot (deploy) spawns. */
-  tabKind?: 'terminal' | 'claude-code' | 'log-tail'
+  /** 'terminal' | 'claude-code' | 'log-tail' | 'deploy' — tags the session
+   *  so ShinShell Remote can scope its waiting-for-input heuristic to
+   *  claude-code panes only, and (§ read-only visibility / § remote deploy)
+   *  list every pty-backed tab kind as a view-only session on the phone.
+   *  'deploy' is never input-eligible even under allowFullTerminalInput —
+   *  see server.ts's inputAllowed(). */
+  tabKind?: 'terminal' | 'claude-code' | 'log-tail' | 'deploy'
   /** § read-only visibility — a human-readable label for Remote's session
    *  chip/title (e.g. a log-tail tab's command label, "Tail Q2 logs")
    *  instead of falling back to the cwd's basename. Optional; only
@@ -189,6 +191,9 @@ export interface RemoteStatus {
   /** Off by default — whether remote input is allowed on plain terminal
    *  tabs, not just claude-code ones. See RemoteSettingsPanel's warning. */
   allowFullTerminalInput: boolean
+  /** § remote deploy (§5) — off by default; whether a paired phone can see
+   *  and fire a project's deploy commands at all. */
+  allowDeploy: boolean
 }
 
 export interface RemoteDevice {

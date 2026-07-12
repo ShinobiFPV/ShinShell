@@ -74,6 +74,12 @@ export default function RemoteSettingsPanel({ onClose }: RemoteSettingsPanelProp
     setStatus({ ...status, allowFullTerminalInput: !status.allowFullTerminalInput })
   }, [status])
 
+  const toggleAllowDeploy = useCallback(() => {
+    if (!status) return
+    window.shinshell.remote.setAllowDeploy(!status.allowDeploy)
+    setStatus({ ...status, allowDeploy: !status.allowDeploy })
+  }, [status])
+
   const sendTest = useCallback(async () => {
     setTestState('sending')
     await window.shinshell.remote.testNotification()
@@ -171,6 +177,17 @@ export default function RemoteSettingsPanel({ onClose }: RemoteSettingsPanelProp
                 <span className="remote-full-input-warning">
                   ⚠ With this on, a paired phone can type into ANY terminal tab — not just answer Claude
                   Code prompts. Leave this off unless you specifically need it.
+                </span>
+              </label>
+
+              <label className="edit-project-field remote-full-input-row">
+                <span>
+                  <input type="checkbox" checked={status.allowDeploy} onChange={toggleAllowDeploy} />{' '}
+                  Allow remote deploy
+                </span>
+                <span className="remote-full-input-warning">
+                  ⚠ With this on, a paired phone can see and fire a project's deploy commands. Dangerous
+                  ones still require the same arm-then-confirm tap as the desktop deploy tab.
                 </span>
               </label>
 

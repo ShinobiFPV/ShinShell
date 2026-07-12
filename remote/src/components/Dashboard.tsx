@@ -1,11 +1,14 @@
 import type { JSX } from 'preact'
 import type { RemoteHealth, RemoteProject } from '../ws/protocol'
 import { formatDuration } from '../util/time'
+import DeployButton from './DeployButton'
 
 interface DashboardProps {
   projects: RemoteProject[]
   health: RemoteHealth | null
   onSelectProject: (projectId: string) => void
+  allowDeploy: boolean
+  onRunDeployCommand: (projectId: string, commandId: string) => void
 }
 
 const STATE_LABEL: Record<RemoteProject['state'], string> = {
@@ -28,7 +31,13 @@ const SSH_LABEL: Record<string, string> = {
 // GET /api/projects/​/api/health at app.tsx's PROJECTS_POLL_MS — no live WS
 // subscription per card (see SessionList's note on why that'd be wasteful
 // for chips nobody's actively viewing).
-export default function Dashboard({ projects, health, onSelectProject }: DashboardProps): JSX.Element {
+export default function Dashboard({
+  projects,
+  health,
+  onSelectProject,
+  allowDeploy,
+  onRunDeployCommand
+}: DashboardProps): JSX.Element {
   return (
     <div class="dashboard">
       <div class="dashboard-grid">
@@ -36,7 +45,11 @@ export default function Dashboard({ projects, health, onSelectProject }: Dashboa
           <div class="dashboard-empty">No projects open on ShinShell right now.</div>
         )}
         {projects.map((p) => (
-          <button
+          // A plain div, not a <button> — § remote deploy (§5) nests real
+          // <button> deploy actions inside, and a <button> can't legally
+          // contain another <button>. Card-tap-to-open still works via
+          // onClick; the deploy buttons stopPropagation to opt out of it.
+          <div
             key={p.id}
             class="project-card"
             style={{ '--card-accent': p.accentColor } as Record<string, string>}
@@ -67,7 +80,19 @@ export default function Dashboard({ projects, health, onSelectProject }: Dashboa
               <span class={`ssh-dot ssh-dot-${p.sshHealth.state}`} />
               <span class="project-card-ssh-label">{SSH_LABEL[p.sshHealth.state]}</span>
             </div>
-          </button>
+            {allowDeploy && p.deployCommands && p.deployCommands.length > 0 && (
+              <div class="project-card-deploy-row">
+                {p.deployCommands.map((cmd) => (
+                  <DeployButton
+                    key={cmd.id}
+                    command={cmd}
+                    accentColor={p.accentColor}
+                    onRun={(commandId) => onRunDeployCommand(p.id, commandId)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </div>
       <div class="dashboard-footer">
