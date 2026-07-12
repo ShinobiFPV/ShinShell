@@ -9,6 +9,13 @@ interface TabListeners {
 
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 15000
+// § connection UX (§6) — the server sends a heartbeat frame every ~4s (see
+// server.ts); if nothing at all arrives for this long, the socket is
+// treated as half-dead (readyState can still read "open" on a connection
+// that's actually stopped delivering — e.g. the phone's wifi silently
+// dropped without a clean TCP close) and force-closed so the existing
+// backoff-reconnect loop takes over instead of sitting on a dead socket.
+const STALE_TIMEOUT_MS = 10000
 
 // § ShinShell Remote — one WebSocket connection per client, multiplexing
 // every subscribed tab's data/state/exit frames (see the plan's "Single
@@ -21,6 +28,7 @@ export class MultiplexClient {
   private readonly connectionListeners = new Set<(connected: boolean) => void>()
   private reconnectAttempt = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private staleTimer: ReturnType<typeof setTimeout> | null = null
   private closedByUser = false
 
   constructor(
@@ -36,6 +44,7 @@ export class MultiplexClient {
   close(): void {
     this.closedByUser = true
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.clearStaleTimer()
     this.ws?.close()
   }
 
@@ -67,9 +76,13 @@ export class MultiplexClient {
 
     ws.addEventListener('open', () => {
       this.send({ type: 'auth', token: this.token })
+      this.resetStaleTimer()
     })
 
     ws.addEventListener('message', (event) => {
+      // Any bytes at all prove the socket is alive — reset before parsing,
+      // so even a frame this client doesn't recognize still counts.
+      this.resetStaleTimer()
       let frame: ServerFrame
       try {
         frame = JSON.parse(event.data as string)
@@ -80,11 +93,26 @@ export class MultiplexClient {
     })
 
     ws.addEventListener('close', () => {
+      this.clearStaleTimer()
       this.notifyConnection(false)
       if (!this.closedByUser) this.scheduleReconnect()
     })
 
     ws.addEventListener('error', () => ws.close())
+  }
+
+  private resetStaleTimer(): void {
+    this.clearStaleTimer()
+    this.staleTimer = setTimeout(() => {
+      // No heartbeat (or anything else) in STALE_TIMEOUT_MS — don't wait on
+      // the browser to eventually notice; force the reconnect loop now.
+      this.ws?.close()
+    }, STALE_TIMEOUT_MS)
+  }
+
+  private clearStaleTimer(): void {
+    if (this.staleTimer) clearTimeout(this.staleTimer)
+    this.staleTimer = null
   }
 
   private handleFrame(frame: ServerFrame): void {
@@ -96,6 +124,10 @@ export class MultiplexClient {
       for (const tabId of this.subscribed) this.sendSubscribe(tabId)
       return
     }
+    // Nothing to do beyond the resetStaleTimer() every message already
+    // gets in the 'message' listener above — its only job is proving the
+    // socket is still alive.
+    if (frame.type === 'heartbeat') return
     const listeners = this.tabListeners.get(frame.tabId)
     if (!listeners) return
     if (frame.type === 'scrollback') listeners.onScrollback?.({ data: frame.data })

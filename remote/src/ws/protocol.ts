@@ -19,6 +19,11 @@ export type ServerFrame =
   | { type: 'state'; tabId: string; status: WaitStatus }
   | { type: 'data'; tabId: string; data: string }
   | { type: 'exit'; tabId: string; exitCode: number }
+  // § connection UX (§6) — sent every ~4s to every authenticated connection
+  // so the client can detect a half-dead socket (readyState still "open"
+  // but nothing's actually arriving) within ~10s instead of waiting on the
+  // OS/browser to notice — see MultiplexClient's staleness timer.
+  | { type: 'heartbeat' }
 
 // § read-only visibility (§4) — 'log-tail' (and any future non-claude-code
 // pty-backed tab kind) shows up here too now, not just terminal/claude-code;

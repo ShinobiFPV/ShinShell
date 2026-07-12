@@ -9,6 +9,17 @@ interface DashboardProps {
   onSelectProject: (projectId: string) => void
   allowDeploy: boolean
   onRunDeployCommand: (projectId: string, commandId: string) => void
+  /** § connection UX (§6) — true whenever the WS isn't live, so the cards
+   *  below might be showing a cached snapshot rather than this instant's
+   *  truth. */
+  stale: boolean
+  /** epoch ms of the last successful GET /api/projects — from a live fetch,
+   *  or (on a cold offline launch) the cached snapshot's own timestamp. */
+  dataAsOf: number | null
+}
+
+function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 const STATE_LABEL: Record<RemoteProject['state'], string> = {
@@ -36,13 +47,22 @@ export default function Dashboard({
   health,
   onSelectProject,
   allowDeploy,
-  onRunDeployCommand
+  onRunDeployCommand,
+  stale,
+  dataAsOf
 }: DashboardProps): JSX.Element {
   return (
     <div class="dashboard">
+      {stale && dataAsOf !== null && (
+        <div class="dashboard-stale-badge">Showing cached data from {formatClock(dataAsOf)}</div>
+      )}
       <div class="dashboard-grid">
         {projects.length === 0 && (
-          <div class="dashboard-empty">No projects open on ShinShell right now.</div>
+          <div class="dashboard-empty">
+            {stale && dataAsOf === null
+              ? 'ShinShell unreachable and nothing cached yet.'
+              : 'No projects open on ShinShell right now.'}
+          </div>
         )}
         {projects.map((p) => (
           // A plain div, not a <button> — § remote deploy (§5) nests real

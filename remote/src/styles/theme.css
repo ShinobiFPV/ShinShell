@@ -97,13 +97,32 @@ input {
   font-size: 13px;
 }
 
-.offline-banner {
-  background: rgba(255, 60, 60, 0.12);
-  color: #ff6b6b;
+/* § connection UX (§6) */
+
+.connection-ribbon {
   font-size: 12px;
   padding: 6px 10px;
   text-align: center;
   flex: 0 0 auto;
+}
+
+.connection-ribbon-reconnecting {
+  background: rgba(255, 180, 0, 0.12);
+  color: #ffb400;
+}
+
+.connection-ribbon-offline {
+  background: rgba(255, 60, 60, 0.12);
+  color: #ff6b6b;
+}
+
+.dashboard-stale-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #ffb400;
+  background: rgba(255, 180, 0, 0.1);
+  text-align: center;
+  padding: 5px 8px;
 }
 
 /* Mission Control dashboard */

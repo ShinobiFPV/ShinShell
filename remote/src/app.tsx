@@ -4,11 +4,13 @@ import PairingScreen, { type Pairing } from './components/PairingScreen'
 import Dashboard from './components/Dashboard'
 import SessionList from './components/SessionList'
 import TerminalView from './components/TerminalView'
+import ConnectionRibbon from './components/ConnectionRibbon'
 import { MultiplexClient } from './ws/MultiplexClient'
 import type { NotificationSettings, RemoteHealth, RemoteProject, RemoteProjectsResponse } from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
 import { loadCustomActions, saveCustomActions, type CustomAction } from './localSettings'
 import { idbSet, idbDelete } from './idb'
+import { loadLastProjects, saveLastProjects, loadLastHealth, saveLastHealth, clearLastKnown } from './lastKnown'
 
 const STORAGE_KEY = 'shinshell-remote-pairing'
 const PROJECTS_POLL_MS = 5000
@@ -266,15 +268,25 @@ function consumeDeepLinkTabId(): string | null {
   return tabId
 }
 
+// § connection UX (§6) — seeded once at module scope (not inside the
+// component) purely so both initial-state initializers below read the same
+// snapshot without a second localStorage round-trip.
+const cachedProjects = loadLastProjects()
+const cachedHealth = loadLastHealth()
+
 export default function App(): JSX.Element {
   const [pairing, setPairing] = useState<Pairing | null>(loadPairing)
-  const [projects, setProjects] = useState<RemoteProject[]>([])
-  const [allowFullTerminalInput, setAllowFullTerminalInput] = useState(false)
-  const [allowDeploy, setAllowDeploy] = useState(false)
-  const [health, setHealth] = useState<RemoteHealth | null>(null)
+  const [projects, setProjects] = useState<RemoteProject[]>(cachedProjects?.data.projects ?? [])
+  const [allowFullTerminalInput, setAllowFullTerminalInput] = useState(
+    cachedProjects?.data.allowFullTerminalInput ?? false
+  )
+  const [allowDeploy, setAllowDeploy] = useState(cachedProjects?.data.allowDeploy ?? false)
+  const [projectsAsOf, setProjectsAsOf] = useState<number | null>(cachedProjects?.at ?? null)
+  const [health, setHealth] = useState<RemoteHealth | null>(cachedHealth?.data ?? null)
   const [screen, setScreen] = useState<Screen>('home')
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
+  const [disconnectedSince, setDisconnectedSince] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [customActions, setCustomActionsState] = useState<CustomAction[]>(loadCustomActions)
   const clientRef = useRef<MultiplexClient | null>(null)
@@ -297,7 +309,14 @@ export default function App(): JSX.Element {
     if (!pairing) return
     const client = new MultiplexClient(wsUrlFor(pairing.serverUrl), pairing.token)
     clientRef.current = client
-    const off = client.onConnectionChange(setConnected)
+    const off = client.onConnectionChange((isConnected) => {
+      setConnected(isConnected)
+      // Set once on the *first* drop and held steady across every retry in
+      // the backoff loop, so "offline since" names when it actually broke —
+      // not the timestamp of whichever reconnect attempt happens to be
+      // failing right now.
+      setDisconnectedSince((prev) => (isConnected ? null : (prev ?? Date.now())))
+    })
     client.connect()
     return () => {
       off()
@@ -317,8 +336,12 @@ export default function App(): JSX.Element {
       setProjects(body.projects)
       setAllowFullTerminalInput(body.allowFullTerminalInput)
       setAllowDeploy(body.allowDeploy)
+      setProjectsAsOf(Date.now())
+      saveLastProjects(body)
     } catch {
-      // offline — the "ShinShell is offline" banner below already covers this
+      // offline — ConnectionRibbon covers this; `projects` just holds
+      // whatever it last had (in-memory, or the cached seed on a cold
+      // launch) rather than being cleared out from under the dashboard.
     }
   }, [pairing])
 
@@ -326,13 +349,13 @@ export default function App(): JSX.Element {
     if (!pairing) return
     try {
       const res = await fetch(`${pairing.serverUrl}/api/health`)
-      if (!res.ok) {
-        setHealth(null)
-        return
-      }
-      setHealth((await res.json()) as RemoteHealth)
+      if (!res.ok) return
+      const body = (await res.json()) as RemoteHealth
+      setHealth(body)
+      saveLastHealth(body)
     } catch {
-      setHealth(null)
+      // offline — leave the last-known health (live or cached) in place
+      // rather than blanking it; the ribbon already says we're offline.
     }
   }, [pairing])
 
@@ -367,9 +390,11 @@ export default function App(): JSX.Element {
 
   const forgetDevice = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
+    clearLastKnown()
     setPairing(null)
     setProjects([])
     setHealth(null)
+    setProjectsAsOf(null)
     setScreen('home')
     setActiveTabId(null)
     setSettingsOpen(false)
@@ -445,7 +470,7 @@ export default function App(): JSX.Element {
         </button>
       </div>
 
-      {!connected && <div class="offline-banner">Reconnecting to ShinShell…</div>}
+      <ConnectionRibbon connected={connected} disconnectedSince={disconnectedSince} />
 
       <div class="app-main">
         {screen === 'home' ? (
@@ -455,6 +480,8 @@ export default function App(): JSX.Element {
             onSelectProject={openProject}
             allowDeploy={allowDeploy}
             onRunDeployCommand={runDeployCommand}
+            stale={!connected}
+            dataAsOf={projectsAsOf}
           />
         ) : activeTab && clientRef.current ? (
           <TerminalView

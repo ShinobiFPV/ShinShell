@@ -28,6 +28,13 @@ import type { RemoteStatus, PtyDataEvent, PtyExitEvent, SshHealthStatus, DeployR
 const PORT = 8443
 const CERT_RENEW_INTERVAL_MS = 24 * 60 * 60 * 1000
 const AUTH_GRACE_MS = 5000
+// § connection UX (§6) — server-side half of the heartbeat: a JSON
+// {type:'heartbeat'} frame plus a protocol-level ping every interval, so
+// both the client (via the JSON frame, which its own JS can observe) and
+// this server (via the ping/pong's `alive` flag, which browsers answer
+// automatically at the protocol level without any client JS involved) each
+// detect a half-dead socket well inside the plan's ~10s target.
+const HEARTBEAT_INTERVAL_MS = 4000
 
 const KEY_BYTES: Record<string, string> = {
   enter: '\r',
@@ -51,10 +58,16 @@ interface ClientConn {
   deviceId: string | null
   subscriptions: Set<string>
   authTimer: ReturnType<typeof setTimeout> | null
+  /** § connection UX (§6) — cleared on every heartbeat tick, set again on
+   *  the pong reply; a connection that's still false when the *next* tick
+   *  fires missed a full interval and gets terminated server-side. Mirrors
+   *  the client's own staleness timer, just from the other end. */
+  alive: boolean
 }
 
 let runtime: Runtime | null = null
 let lastError: string | null = null
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 const connections = new Set<ClientConn>()
 
 function errMessage(err: unknown): string {
@@ -471,6 +484,26 @@ function buildApp(): express.Express {
 // frames (see the plan's "Single multiplexed WebSocket" scope decision).
 // ---------------------------------------------------------------------------
 
+function startHeartbeat(): void {
+  heartbeatTimer = setInterval(() => {
+    for (const conn of connections) {
+      if (!conn.deviceId) continue // pre-auth — AUTH_GRACE_MS's own timeout already covers this
+      if (!conn.alive) {
+        conn.ws.terminate()
+        continue
+      }
+      conn.alive = false
+      conn.ws.ping()
+      send(conn.ws, { type: 'heartbeat' })
+    }
+  }, HEARTBEAT_INTERVAL_MS)
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+}
+
 function attachWebSocket(httpsServer: HttpsServer): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true })
 
@@ -487,11 +520,14 @@ function attachWebSocket(httpsServer: HttpsServer): WebSocketServer {
 }
 
 function handleConnection(ws: WebSocket): void {
-  const conn: ClientConn = { ws, deviceId: null, subscriptions: new Set(), authTimer: null }
+  const conn: ClientConn = { ws, deviceId: null, subscriptions: new Set(), authTimer: null, alive: true }
   conn.authTimer = setTimeout(() => {
     if (!conn.deviceId) ws.close(4001, 'auth timeout')
   }, AUTH_GRACE_MS)
   connections.add(conn)
+  ws.on('pong', () => {
+    conn.alive = true
+  })
 
   ws.on('message', (raw) => {
     let msg: Record<string, unknown>
@@ -659,6 +695,7 @@ export async function startRemoteServer(): Promise<{ ok: boolean; error?: string
   const renewTimer = setInterval(() => void renewCertAndRecheckIp(), CERT_RENEW_INTERVAL_MS)
   runtime = { httpsServer, wss, self, renewTimer }
   lastError = null
+  startHeartbeat()
 
   const state = loadRemoteState()
   state.enabled = true
@@ -675,6 +712,7 @@ export async function startRemoteServer(): Promise<{ ok: boolean; error?: string
 export function stopRemoteServer(): void {
   if (!runtime) return
   clearInterval(runtime.renewTimer)
+  stopHeartbeat()
   for (const conn of connections) conn.ws.close(1001, 'server stopping')
   connections.clear()
   runtime.wss.close()
