@@ -11,6 +11,10 @@ interface LogTailTabProps {
   shell: string
   env: Record<string, string>
   active: boolean
+  /** § read-only visibility — the project command's own label (e.g. "Tail
+   *  Q2 logs"), passed through to pty.spawn so ShinShell Remote can title
+   *  this tab meaningfully instead of falling back to the cwd's basename. */
+  label?: string
 }
 
 type ConnState = 'connecting' | 'connected' | 'disconnected'
@@ -20,7 +24,15 @@ type ConnState = 'connecting' | 'connected' | 'disconnected'
 // causes duplicate prompt redraws). This tails a specific command rather
 // than being a general interactive shell, and tracks connection state +
 // offers reconnect instead.
-export default function LogTailTab({ tabId, command, cwd, shell, env, active }: LogTailTabProps): JSX.Element {
+export default function LogTailTab({
+  tabId,
+  command,
+  cwd,
+  shell,
+  env,
+  active,
+  label
+}: LogTailTabProps): JSX.Element {
   const [connState, setConnState] = useState<ConnState>('connecting')
   const [generation, setGeneration] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,7 +75,16 @@ export default function LogTailTab({ tabId, command, cwd, shell, env, active }: 
         spawned = true
         lastCols = xterm.cols
         lastRows = xterm.rows
-        window.shinshell.pty.spawn({ id: paneId, cwd, cols: xterm.cols, rows: xterm.rows, shell, env })
+        window.shinshell.pty.spawn({
+          id: paneId,
+          cwd,
+          cols: xterm.cols,
+          rows: xterm.rows,
+          shell,
+          env,
+          tabKind: 'log-tail',
+          label
+        })
         offData = window.shinshell.pty.onData(({ id, data }) => {
           if (id !== paneId) return
           setConnState('connected')

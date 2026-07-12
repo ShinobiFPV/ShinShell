@@ -20,9 +20,14 @@ export type ServerFrame =
   | { type: 'data'; tabId: string; data: string }
   | { type: 'exit'; tabId: string; exitCode: number }
 
+// § read-only visibility (§4) — 'log-tail' (and any future non-claude-code
+// pty-backed tab kind) shows up here too now, not just terminal/claude-code;
+// server.ts's GET /api/projects only ever includes kinds that actually have
+// a live pty session (editor/scratchpad/claude-chat/ports have none, so
+// they're simply absent — there's nothing to stream).
 export interface RemoteTab {
   id: string
-  type: 'terminal' | 'claude-code'
+  type: 'terminal' | 'claude-code' | 'log-tail'
   title: string
   state?: WaitStatus
 }

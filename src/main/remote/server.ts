@@ -220,7 +220,7 @@ function buildApp(): express.Express {
           .map((s) => ({
             id: s.id,
             type: s.meta!.tabKind,
-            title: s.meta!.tabKind === 'claude-code' ? 'Claude Code' : basename(s.meta!.cwd),
+            title: s.meta!.tabKind === 'claude-code' ? 'Claude Code' : (s.meta!.label ?? basename(s.meta!.cwd)),
             state: s.meta!.tabKind === 'claude-code' ? getWaitStatus(s.id) : undefined
           }))
         const claudeTabIds = tabs.filter((t) => t.type === 'claude-code').map((t) => t.id)
@@ -242,7 +242,11 @@ function buildApp(): express.Express {
         }
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)
-    res.json({ projects })
+    // § read-only visibility (§4) — allowFullTerminalInput travels with the
+    // list rather than needing its own endpoint: it's the one bit the PWA
+    // needs to decide whether a non-claude-code tab's input bar should show
+    // at all (see TerminalView's `allowInput` prop in the PWA).
+    res.json({ projects, allowFullTerminalInput: loadRemoteState().allowFullTerminalInput })
   })
 
   expressApp.post('/api/tabs/:id/keys', (req, res) => {

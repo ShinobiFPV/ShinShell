@@ -319,6 +319,17 @@ input {
   text-overflow: ellipsis;
 }
 
+.session-chip-view-only {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #777;
+  border: 1px solid #3a3f47;
+  border-radius: 4px;
+  padding: 1px 4px;
+  flex: 0 0 auto;
+}
+
 /* Status dots */
 
 .status-dot {
@@ -503,6 +514,18 @@ input {
 .terminal-multiline-toggle {
   flex: 0 0 auto;
   padding: 8px 10px;
+}
+
+.terminal-view-only-bar {
+  flex: 0 0 auto;
+  text-align: center;
+  padding: 10px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid #1c1f24;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #666;
 }
 
 /* Landscape phones: vertical space is scarce, so shrink the chrome around

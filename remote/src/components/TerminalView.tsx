@@ -225,75 +225,75 @@ export default function TerminalView({
         )}
       </div>
 
-      <div class="terminal-quick-actions">
-        {QUICK_KEYS.map((k) => (
-          <QuickActionButton
-            key={k.key}
-            label={k.label}
-            preview={k.preview}
-            disabled={!allowInput}
-            onPress={() => sendKey(k.key)}
-          />
-        ))}
-      </div>
+      {allowInput ? (
+        <>
+          <div class="terminal-quick-actions">
+            {QUICK_KEYS.map((k) => (
+              <QuickActionButton key={k.key} label={k.label} preview={k.preview} onPress={() => sendKey(k.key)} />
+            ))}
+          </div>
 
-      {customActions.length > 0 && (
-        <div class="terminal-quick-actions terminal-quick-actions-custom">
-          {customActions.map((a) => (
-            <QuickActionButton
-              key={a.id}
-              label={a.label}
-              preview={`Sends: "${a.value}" + Enter`}
-              disabled={!allowInput}
-              onPress={() => sendCustomAction(a.value)}
-            />
-          ))}
-        </div>
-      )}
+          {customActions.length > 0 && (
+            <div class="terminal-quick-actions terminal-quick-actions-custom">
+              {customActions.map((a) => (
+                <QuickActionButton
+                  key={a.id}
+                  label={a.label}
+                  preview={`Sends: "${a.value}" + Enter`}
+                  onPress={() => sendCustomAction(a.value)}
+                />
+              ))}
+            </div>
+          )}
 
-      <form
-        class="terminal-input-row"
-        onSubmit={(e) => {
-          e.preventDefault()
-          submitDraft()
-        }}
-      >
-        {multiline ? (
-          <textarea
-            value={draft}
-            onInput={(e) => setDraft((e.target as HTMLTextAreaElement).value)}
-            onKeyDown={onTextareaKeyDown}
-            placeholder={allowInput ? 'Type a reply… (Ctrl+Enter to send)' : 'Read-only (plain terminal tab)'}
-            disabled={!allowInput}
-            rows={3}
-          />
-        ) : (
-          <input
-            ref={inputRef}
-            type="text"
-            value={draft}
-            onInput={(e) => {
-              setDraft((e.target as HTMLInputElement).value)
-              setHistoryPos(null)
+          <form
+            class="terminal-input-row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitDraft()
             }}
-            onKeyDown={onInputKeyDown}
-            placeholder={allowInput ? 'Type a reply…' : 'Read-only (plain terminal tab)'}
-            disabled={!allowInput}
-          />
-        )}
-        <button
-          type="button"
-          class="terminal-multiline-toggle"
-          onClick={() => setMultiline((m) => !m)}
-          disabled={!allowInput}
-          title={multiline ? 'Switch to single line' : 'Switch to multiline'}
-        >
-          {multiline ? '1L' : '¶'}
-        </button>
-        <button type="submit" disabled={!allowInput || !draft.trim()}>
-          Send
-        </button>
-      </form>
+          >
+            {multiline ? (
+              <textarea
+                value={draft}
+                onInput={(e) => setDraft((e.target as HTMLTextAreaElement).value)}
+                onKeyDown={onTextareaKeyDown}
+                placeholder="Type a reply… (Ctrl+Enter to send)"
+                rows={3}
+              />
+            ) : (
+              <input
+                ref={inputRef}
+                type="text"
+                value={draft}
+                onInput={(e) => {
+                  setDraft((e.target as HTMLInputElement).value)
+                  setHistoryPos(null)
+                }}
+                onKeyDown={onInputKeyDown}
+                placeholder="Type a reply…"
+              />
+            )}
+            <button
+              type="button"
+              class="terminal-multiline-toggle"
+              onClick={() => setMultiline((m) => !m)}
+              title={multiline ? 'Switch to single line' : 'Switch to multiline'}
+            >
+              {multiline ? '1L' : '¶'}
+            </button>
+            <button type="submit" disabled={!draft.trim()}>
+              Send
+            </button>
+          </form>
+        </>
+      ) : (
+        // § read-only visibility (§4) — the input bar doesn't just disable
+        // here, it's gone entirely: a log-tail (or any non-claude-code) tab
+        // has nothing to type into unless allowFullTerminalInput is on, in
+        // which case allowInput is already true and this branch never renders.
+        <div class="terminal-view-only-bar">VIEW ONLY</div>
+      )}
     </div>
   )
 }

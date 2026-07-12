@@ -20,7 +20,8 @@ interface Session {
   proc: pty.IPty
   windowId: number
   cwd: string
-  tabKind?: 'terminal' | 'claude-code'
+  tabKind?: 'terminal' | 'claude-code' | 'log-tail'
+  label?: string
   scrollback: string
 }
 
@@ -69,7 +70,14 @@ export function spawnPty(win: BrowserWindow, opts: PtySpawnOptions): void {
     return
   }
 
-  sessions.set(opts.id, { proc, windowId: win.id, cwd: opts.cwd, tabKind: opts.tabKind, scrollback: '' })
+  sessions.set(opts.id, {
+    proc,
+    windowId: win.id,
+    cwd: opts.cwd,
+    tabKind: opts.tabKind,
+    label: opts.label,
+    scrollback: ''
+  })
 
   proc.onData((data) => {
     const payload: PtyDataEvent = { id: opts.id, data }
@@ -106,9 +114,11 @@ export function getScrollback(id: string): string {
  *  server core: input is claude-code-only unless allowFullTerminalInput). */
 export function getSessionMeta(
   id: string
-): { windowId: number; cwd: string; tabKind?: 'terminal' | 'claude-code' } | undefined {
+): { windowId: number; cwd: string; tabKind?: 'terminal' | 'claude-code' | 'log-tail'; label?: string } | undefined {
   const session = sessions.get(id)
-  return session && { windowId: session.windowId, cwd: session.cwd, tabKind: session.tabKind }
+  return (
+    session && { windowId: session.windowId, cwd: session.cwd, tabKind: session.tabKind, label: session.label }
+  )
 }
 
 export function listSessionIds(): string[] {

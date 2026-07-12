@@ -81,10 +81,17 @@ export interface PtySpawnOptions {
    *  so the pty's exit code is the command's own — used by the deploy tab
    *  (§6.7) to record real exit codes in history. */
   oneShotCommand?: string
-  /** 'terminal' | 'claude-code' — tags the session so ShinShell Remote can
-   *  scope its waiting-for-input heuristic and input gating (§ Remote) to
-   *  claude-code panes only. Absent for one-shot (deploy) spawns. */
-  tabKind?: 'terminal' | 'claude-code'
+  /** 'terminal' | 'claude-code' | 'log-tail' — tags the session so
+   *  ShinShell Remote can scope its waiting-for-input heuristic to
+   *  claude-code panes only, and (§ read-only visibility) list every
+   *  pty-backed tab kind — not just claude-code — as a view-only session on
+   *  the phone. Absent for one-shot (deploy) spawns. */
+  tabKind?: 'terminal' | 'claude-code' | 'log-tail'
+  /** § read-only visibility — a human-readable label for Remote's session
+   *  chip/title (e.g. a log-tail tab's command label, "Tail Q2 logs")
+   *  instead of falling back to the cwd's basename. Optional; only
+   *  log-tail spawns set it today. */
+  label?: string
 }
 
 export interface PtyDataEvent {

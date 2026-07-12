@@ -269,6 +269,7 @@ function consumeDeepLinkTabId(): string | null {
 export default function App(): JSX.Element {
   const [pairing, setPairing] = useState<Pairing | null>(loadPairing)
   const [projects, setProjects] = useState<RemoteProject[]>([])
+  const [allowFullTerminalInput, setAllowFullTerminalInput] = useState(false)
   const [health, setHealth] = useState<RemoteHealth | null>(null)
   const [screen, setScreen] = useState<Screen>('home')
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
@@ -311,8 +312,9 @@ export default function App(): JSX.Element {
         headers: { Authorization: `Bearer ${pairing.token}` }
       })
       if (!res.ok) return
-      const body = (await res.json()) as { projects: RemoteProject[] }
+      const body = (await res.json()) as { projects: RemoteProject[]; allowFullTerminalInput: boolean }
       setProjects(body.projects)
+      setAllowFullTerminalInput(body.allowFullTerminalInput)
     } catch {
       // offline — the "ShinShell is offline" banner below already covers this
     }
@@ -406,6 +408,7 @@ export default function App(): JSX.Element {
               projects={selectedProject ? [selectedProject] : []}
               activeTabId={activeTabId}
               onSelect={setActiveTabId}
+              allowFullTerminalInput={allowFullTerminalInput}
             />
           </>
         ) : (
@@ -425,7 +428,7 @@ export default function App(): JSX.Element {
           <TerminalView
             key={activeTab.id}
             tabId={activeTab.id}
-            allowInput={activeTab.type === 'claude-code'}
+            allowInput={activeTab.type === 'claude-code' || allowFullTerminalInput}
             client={clientRef.current}
             serverUrl={pairing.serverUrl}
             token={pairing.token}

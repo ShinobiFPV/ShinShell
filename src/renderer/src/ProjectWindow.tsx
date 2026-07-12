@@ -714,6 +714,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
                         shell={config.shell}
                         env={shellEnv}
                         active={active}
+                        label={cmd.label}
                       />
                     )
                   })()
