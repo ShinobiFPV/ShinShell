@@ -13,6 +13,7 @@ import {
   saveFontSize,
   type CustomAction
 } from '../localSettings'
+import { apiUrl } from '../apiBase'
 
 interface TerminalViewProps {
   tabId: string
@@ -158,7 +159,7 @@ export default function TerminalView({
   }, [applyFontSize, fontSize])
 
   const sendKey = (key: string): void => {
-    void fetch(`${serverUrl}/api/tabs/${tabId}/keys`, {
+    void fetch(apiUrl(serverUrl, `/tabs/${tabId}/keys`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ key })

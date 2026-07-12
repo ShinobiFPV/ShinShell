@@ -12,7 +12,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { app as electronApp } from 'electron'
 import { getTailscaleSelf, issueCert, type TailscaleSelf } from './tailscale'
 import { loadRemoteState, saveRemoteState, type PushSubscriptionJson, type QuietHours } from './state'
-import { verifyToken, submitPin, type PairResult } from './pairing'
+import { verifyToken, submitPin, revokeDevice, type PairResult } from './pairing'
 import { ensureVapid, getVapidPublicKey, notifyAllDevices } from './push'
 import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents, spawnPty } from '../pty'
 import { waitEvents, getStatus as getWaitStatus, getStateSince, type WaitStatus } from './waitDetector'
@@ -214,12 +214,25 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   next()
 }
 
+// § API versioning (§7) — every REST/WS route lives under this prefix. A
+// service-worker-cached PWA build (possibly stale — ShinShell auto-updates
+// via electron-updater, but a phone's cached app shell doesn't know that
+// happened) hitting a server whose API shape has since moved on gets a
+// clean 404 instead of a route that quietly behaves differently; the PWA
+// itself separately compares its own build-time ShinShell version against
+// GET /health's `version` and warns loudly on a mismatch rather than
+// leaving it to manifest as confusing one-off failures (see
+// remote/src/versionCheck.ts).
+const API_VERSION = 'v1'
+
 function buildApp(): express.Express {
   const pwaDistDir = getPwaDistDir()
   const expressApp = express()
   expressApp.use(express.json())
 
-  expressApp.get('/api/health', (_req, res) => {
+  const v1 = express.Router()
+
+  v1.get('/health', (_req, res) => {
     res.json({
       version: electronApp.getVersion(),
       uptime: process.uptime(),
@@ -228,7 +241,7 @@ function buildApp(): express.Express {
     })
   })
 
-  expressApp.post('/api/pair', (req, res) => {
+  v1.post('/pair', (req, res) => {
     const { pin, deviceName } = (req.body ?? {}) as { pin?: unknown; deviceName?: unknown }
     if (typeof pin !== 'string') {
       res.status(400).json({ error: 'pin required' })
@@ -242,12 +255,12 @@ function buildApp(): express.Express {
     res.json({ token: result.token, vapidPublicKey: getVapidPublicKey() })
   })
 
-  // Everything registered from here down requires a bearer token — /api/pair
-  // and /api/health above are the only exceptions, by virtue of having
-  // already matched (and responded) before this middleware runs.
-  expressApp.use('/api', authMiddleware)
+  // Everything registered from here down requires a bearer token — /pair
+  // and /health above are the only exceptions, by virtue of having already
+  // matched (and responded) before this middleware runs.
+  v1.use(authMiddleware)
 
-  expressApp.get('/api/projects', (_req, res) => {
+  v1.get('/projects', (_req, res) => {
     const projects = listOpenProjectIds()
       .map((projectId) => {
         const config = getProject(projectId)
@@ -308,7 +321,7 @@ function buildApp(): express.Express {
   // ask the main process to track "armed" state either, so this endpoint
   // just runs the command the instant it's called, same trust boundary as
   // every other authenticated Remote request.
-  expressApp.post('/api/projects/:projectId/commands/:commandId/run', (req, res) => {
+  v1.post('/projects/:projectId/commands/:commandId/run', (req, res) => {
     if (!loadRemoteState().allowDeploy) {
       res.status(403).json({ error: 'remote deploy is not enabled' })
       return
@@ -377,7 +390,7 @@ function buildApp(): express.Express {
     res.json({ ok: true, runId })
   })
 
-  expressApp.post('/api/tabs/:id/keys', (req, res) => {
+  v1.post('/tabs/:id/keys', (req, res) => {
     const tabId = req.params.id
     const key = (req.body as { key?: unknown } | undefined)?.key
     if (typeof key !== 'string' || !(key in KEY_BYTES)) {
@@ -392,7 +405,7 @@ function buildApp(): express.Express {
     res.json({ ok: true })
   })
 
-  expressApp.post('/api/push/subscribe', (req: Request & { deviceId?: string }, res) => {
+  v1.post('/push/subscribe', (req: Request & { deviceId?: string }, res) => {
     const subscription = (req.body as { subscription?: PushSubscriptionJson } | undefined)?.subscription
     if (!subscription?.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
       res.status(400).json({ error: 'invalid subscription' })
@@ -415,7 +428,7 @@ function buildApp(): express.Express {
   // subscriptions are already per-device: a tablet that's always on charger
   // might want every project audible while a phone wants Q2 only and no
   // 2am pings.
-  expressApp.get('/api/notifications/settings', (req: Request & { deviceId?: string }, res) => {
+  v1.get('/notifications/settings', (req: Request & { deviceId?: string }, res) => {
     const state = loadRemoteState()
     const device = state.devices.find((d) => d.id === req.deviceId)
     if (!device) {
@@ -428,7 +441,7 @@ function buildApp(): express.Express {
     })
   })
 
-  expressApp.post('/api/notifications/settings', (req: Request & { deviceId?: string }, res) => {
+  v1.post('/notifications/settings', (req: Request & { deviceId?: string }, res) => {
     const state = loadRemoteState()
     const device = state.devices.find((d) => d.id === req.deviceId)
     if (!device) {
@@ -461,6 +474,33 @@ function buildApp(): express.Express {
     saveRemoteState(state)
     res.json({ ok: true })
   })
+
+  // § housekeeping (§7) — paired-devices screen: list every paired device
+  // (flagging which one is *this* device, from the requesting bearer
+  // token) and let the phone revoke any of them, itself included — revoking
+  // self is equivalent to the desktop's own "Revoke" and simply invalidates
+  // this device's token going forward; the PWA notices via the next 401 and
+  // forgets its local pairing.
+  v1.get('/devices', (req: Request & { deviceId?: string }, res) => {
+    const state = loadRemoteState()
+    res.json({
+      devices: state.devices.map((d) => ({
+        id: d.id,
+        name: d.name,
+        pairedAt: d.pairedAt,
+        lastSeenAt: d.lastSeenAt,
+        hasPushSubscription: Boolean(d.pushSubscription),
+        isThisDevice: d.id === req.deviceId
+      }))
+    })
+  })
+
+  v1.post('/devices/:id/revoke', (req, res) => {
+    revokeDevice(req.params.id)
+    res.json({ ok: true })
+  })
+
+  expressApp.use(`/api/${API_VERSION}`, v1)
 
   expressApp.use(express.static(pwaDistDir))
   expressApp.use((req, res) => {
@@ -508,7 +548,7 @@ function attachWebSocket(httpsServer: HttpsServer): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true })
 
   httpsServer.on('upgrade', (req, socket, head) => {
-    if (req.url !== '/api/ws') {
+    if (req.url !== `/api/${API_VERSION}/ws`) {
       socket.destroy()
       return
     }

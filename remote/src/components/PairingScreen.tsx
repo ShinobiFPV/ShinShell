@@ -1,5 +1,7 @@
 import type { JSX } from 'preact'
 import { useState } from 'preact/hooks'
+import { apiUrl } from '../apiBase'
+import IosInstallBanner from './IosInstallBanner'
 
 export interface Pairing {
   serverUrl: string
@@ -34,7 +36,7 @@ export default function PairingScreen({ onPaired }: PairingScreenProps): JSX.Ele
     setError(null)
     const base = serverUrl.trim().replace(/\/$/, '')
     try {
-      const res = await fetch(`${base}/api/pair`, {
+      const res = await fetch(apiUrl(base, '/pair'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin, deviceName: guessDeviceName() })
@@ -55,6 +57,7 @@ export default function PairingScreen({ onPaired }: PairingScreenProps): JSX.Ele
   return (
     <div class="pairing-screen">
       <h1>ShinShell Remote</h1>
+      <IosInstallBanner />
       <p>Enter the 6-digit PIN shown in ShinShell's Remote settings panel.</p>
       <form onSubmit={submit}>
         <label>

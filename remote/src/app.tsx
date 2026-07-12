@@ -5,12 +5,16 @@ import Dashboard from './components/Dashboard'
 import SessionList from './components/SessionList'
 import TerminalView from './components/TerminalView'
 import ConnectionRibbon from './components/ConnectionRibbon'
+import IosInstallBanner from './components/IosInstallBanner'
+import VersionMismatchBanner from './components/VersionMismatchBanner'
+import PairedDevicesSection from './components/PairedDevicesSection'
 import { MultiplexClient } from './ws/MultiplexClient'
 import type { NotificationSettings, RemoteHealth, RemoteProject, RemoteProjectsResponse } from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
 import { loadCustomActions, saveCustomActions, type CustomAction } from './localSettings'
 import { idbSet, idbDelete } from './idb'
 import { loadLastProjects, saveLastProjects, loadLastHealth, saveLastHealth, clearLastKnown } from './lastKnown'
+import { apiUrl, wsUrlFor } from './apiBase'
 
 const STORAGE_KEY = 'shinshell-remote-pairing'
 const PROJECTS_POLL_MS = 5000
@@ -24,10 +28,6 @@ function loadPairing(): Pairing | null {
   } catch {
     return null
   }
-}
-
-function wsUrlFor(serverUrl: string): string {
-  return `${serverUrl.replace(/^http/, 'ws')}/api/ws`
 }
 
 function QuickActionsEditor({
@@ -101,7 +101,7 @@ function NotificationSettingsSection({ projects }: { projects: RemoteProject[] }
   useEffect(() => {
     const pairing = loadPairing()
     if (!pairing) return
-    fetch(`${pairing.serverUrl}/api/notifications/settings`, {
+    fetch(apiUrl(pairing.serverUrl, '/notifications/settings'), {
       headers: { Authorization: `Bearer ${pairing.token}` }
     })
       .then((res) => (res.ok ? (res.json() as Promise<NotificationSettings>) : null))
@@ -115,7 +115,7 @@ function NotificationSettingsSection({ projects }: { projects: RemoteProject[] }
     if (!pairing) return
     setSaving(true)
     try {
-      await fetch(`${pairing.serverUrl}/api/notifications/settings`, {
+      await fetch(apiUrl(pairing.serverUrl, '/notifications/settings'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairing.token}` },
         body: JSON.stringify(next)
@@ -201,12 +201,14 @@ function SettingsOverlay({
   customActions,
   onChangeCustomActions,
   projects,
+  pairing,
   onClose,
   onForget
 }: {
   customActions: CustomAction[]
   onChangeCustomActions: (actions: CustomAction[]) => void
   projects: RemoteProject[]
+  pairing: Pairing
   onClose: () => void
   onForget: () => void
 }): JSX.Element {
@@ -224,7 +226,7 @@ function SettingsOverlay({
       setPushOn(false)
       return
     }
-    await fetch(`${pairing.serverUrl}/api/push/subscribe`, {
+    await fetch(apiUrl(pairing.serverUrl, '/push/subscribe'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairing.token}` },
       body: JSON.stringify({ subscription })
@@ -239,14 +241,13 @@ function SettingsOverlay({
         <button disabled={pushOn === true} onClick={enablePush}>
           {pushOn === true ? 'Notifications on' : 'Enable notifications'}
         </button>
-        <p class="settings-note">
-          iOS: install this app to your Home Screen first (Share → Add to Home Screen) — Safari tabs
-          can't receive push notifications.
-        </p>
+        <IosInstallBanner />
 
         <QuickActionsEditor customActions={customActions} onChange={onChangeCustomActions} />
 
         <NotificationSettingsSection projects={projects} />
+
+        <PairedDevicesSection pairing={pairing} onForgetSelf={onForget} />
 
         <button class="settings-forget" onClick={onForget}>
           Forget this device
@@ -328,7 +329,7 @@ export default function App(): JSX.Element {
   const refreshProjects = useCallback(async () => {
     if (!pairing) return
     try {
-      const res = await fetch(`${pairing.serverUrl}/api/projects`, {
+      const res = await fetch(apiUrl(pairing.serverUrl, '/projects'), {
         headers: { Authorization: `Bearer ${pairing.token}` }
       })
       if (!res.ok) return
@@ -348,7 +349,7 @@ export default function App(): JSX.Element {
   const refreshHealth = useCallback(async () => {
     if (!pairing) return
     try {
-      const res = await fetch(`${pairing.serverUrl}/api/health`)
+      const res = await fetch(apiUrl(pairing.serverUrl, '/health'))
       if (!res.ok) return
       const body = (await res.json()) as RemoteHealth
       setHealth(body)
@@ -419,7 +420,7 @@ export default function App(): JSX.Element {
     async (projectId: string, commandId: string) => {
       if (!pairing) return
       try {
-        const res = await fetch(`${pairing.serverUrl}/api/projects/${projectId}/commands/${commandId}/run`, {
+        const res = await fetch(apiUrl(pairing.serverUrl, `/projects/${projectId}/commands/${commandId}/run`), {
           method: 'POST',
           headers: { Authorization: `Bearer ${pairing.token}` }
         })
@@ -470,6 +471,7 @@ export default function App(): JSX.Element {
         </button>
       </div>
 
+      <VersionMismatchBanner serverVersion={health?.version ?? null} />
       <ConnectionRibbon connected={connected} disconnectedSince={disconnectedSince} />
 
       <div class="app-main">
@@ -503,6 +505,7 @@ export default function App(): JSX.Element {
           customActions={customActions}
           onChangeCustomActions={setCustomActions}
           projects={projects}
+          pairing={pairing}
           onClose={() => setSettingsOpen(false)}
           onForget={forgetDevice}
         />

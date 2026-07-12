@@ -14,6 +14,7 @@
 // MultiplexClient's live connection.
 import { precacheAndRoute } from 'workbox-precaching'
 import { idbGet } from './idb'
+import { apiUrl } from './apiBase'
 
 precacheAndRoute(self.__WB_MANIFEST)
 
@@ -76,7 +77,7 @@ async function sendQuickReply(sessionId: string, key: 'y' | 'n'): Promise<void> 
   const pairing = await idbGet<StoredPairing>('pairing')
   if (!pairing) return
   try {
-    await fetch(`${pairing.serverUrl}/api/tabs/${sessionId}/keys`, {
+    await fetch(apiUrl(pairing.serverUrl, `/tabs/${sessionId}/keys`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairing.token}` },
       body: JSON.stringify({ key })

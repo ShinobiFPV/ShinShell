@@ -161,9 +161,10 @@ macOS/Linux, tray-only mode, settings sync. Scope creep is how apps die young.
 
 ## ShinShell Remote
 
-A phone PWA for the one thing that actually needs a phone: noticing that
-Claude Code is sitting at a permission prompt while you're away from the
-desk, and answering it without walking back.
+A phone PWA that turns "is Claude Code sitting at a permission prompt while
+I'm away from the desk" into a glance instead of a walk back to the office —
+and, for the few other things worth doing from the couch, a guarded way to
+do them without opening a laptop.
 
 **Off by default.** Enabling it (Launcher → the REMOTE badge) starts a small
 HTTPS+WebSocket server inside ShinShell that binds **only** to this
@@ -172,32 +173,71 @@ internet. If Tailscale isn't up, Remote refuses to start rather than
 silently doing something else. HTTPS comes from `tailscale cert`, which
 requires "HTTPS Certificates" turned on for your tailnet in the
 [admin console](https://login.tailscale.com/admin/dns) — see
-docs/DEPLOYING.md if that step is new to you.
+docs/DEPLOYING.md if that step is new to you. The REST/WS API is versioned
+(`/api/v1/…`); the PWA embeds the ShinShell version it was built alongside
+and warns loudly if a stale service-worker-cached app shell ever talks to a
+server that's since moved on, rather than failing in some more confusing way.
 
 **Pairing:** the settings panel shows a QR code (open it on the phone) and,
 on demand, a 6-digit PIN that expires in 5 minutes and locks out after 5
 wrong guesses. The phone submits the PIN once and gets a long-lived device
-token — paired devices are listed (and revocable) in the same panel.
+token. Paired devices are listed (and revocable) from *either* side — the
+desktop settings panel, or the phone's own Settings → Paired devices, which
+also names which entry is "this device."
 
-**What it shows:** every open terminal and Claude Code tab, as
-accent-colored chips with a state dot — green pulse for *waiting on you*,
-amber for busy, grey for idle — built from a ~2s-quiet-plus-prompt-pattern
-heuristic (no shell integration required). Tapping a chip opens a
-read-optimized terminal view with a fixed `[Enter][Esc][↑][↓][y][n]` bar
-and a text field for typed replies.
+**Home screen — Mission Control.** One card per open project, in its accent
+color: aggregate state (WAITING pulse / BUSY spinner / IDLE) across that
+project's Claude Code tabs, how long it's been in that state, the last
+couple of output lines so a glance is often enough to decide whether to dig
+in further, and an SSH dot for the project's primary target. A slim footer
+shows ShinShell's own version/uptime/hostname. This is what a WAITING push
+notification opens into. Tapping a card opens that project's session view;
+from there, every other pty-backed tab (log-tail especially — watching Q2's
+logs from the couch) is reachable too, in a clearly-labeled **view only**
+mode — input stays Claude-Code-only unless the desktop's
+`allowFullTerminalInput` escape hatch is on.
 
-**Input is claude-code-only by default.** A paired phone can answer Claude
-Code prompts, not type into arbitrary terminal tabs — that's a separate,
-explicitly-labeled `allowFullTerminalInput` toggle in settings, because a
-phone driving *any* shell session is a meaningfully bigger blast radius
-than answering a permission prompt.
+**Session view:** pinch-to-zoom or A-/A+ for font size (persisted per
+device), proper scrollback with a "jump to live" pill once you've scrolled
+up, a configurable quick-action row (the default
+`[Enter][Esc][↑][↓][y][n]` plus whatever snippets you add in Settings —
+long-press any of them to see exactly what they send), and a text field
+with local send-history and a multiline toggle for longer replies.
 
-**Push notifications** fire on the busy/idle → waiting transition (and on
-session end), via a plain outbound call to Apple/Google's push service —
-that part works over any network, not just the tailnet; only *opening* the
-notification needs you back on Tailscale. **iOS note:** Push only works
-from a PWA added to the Home Screen (Share → Add to Home Screen) on iOS
-16.4+ — a normal Safari tab can't subscribe at all.
+**Push notifications** fire once per WAITING *episode* (a session flapping
+busy→waiting→busy→waiting twice in quick succession gets two pushes, not
+one swallowed by a cooldown) via a plain outbound call to Apple/Google's
+push service — that part works over any network, not just the tailnet; only
+*opening* the notification needs you back on Tailscale. Where the platform
+renders notification actions (Chrome/Android; iOS Safari doesn't support
+them at all, so it falls back to tap-to-open there), **y**/**n**/**Open**
+buttons let you answer a prompt straight from the lock screen — the service
+worker POSTs the key itself, no window ever opens. Per-device (not global)
+project mute list and a quiet-hours window, editable from the phone's own
+Settings — per-device because push subscriptions already are; a tablet on
+the desk might want everything audible while a phone wants one project and
+no 2am pings. **iOS note:** push only works from a PWA added to the Home
+Screen (Share → Add to Home Screen) on iOS 16.4+ — a normal Safari tab
+can't subscribe at all; the app says so inline on first launch.
+
+**Remote deploy — opt-in, guarded.** A separate desktop toggle,
+`remote.allowDeploy` (default **off**), gates whether a project's deploy
+commands (the same set the desktop's own Deploy tab exposes) even appear on
+its card. Non-dangerous ones fire on tap; dangerous ones arm first — a 3s
+accent-color countdown naming exactly what's about to run and where, second
+tap within the window confirms — the identical pattern as the desktop's
+own arm-to-confirm. A triggered run streams into a read-only view and pushes
+a green/red result notification on completion.
+
+**Connection UX:** an application-level WS heartbeat (server pings every
+4s; the client force-reconnects if ~10s pass with nothing at all, rather
+than waiting on the OS to notice a half-dead socket) backs the existing
+exponential-backoff reconnect, surfaced as a ribbon that distinguishes
+"still trying" from "actually broken" by elapsed time — past ~15s down it
+names the moment things broke instead of repeating "reconnecting" forever.
+The last successful project list and health check are cached on-device, so
+a cold launch with no connectivity paints the last-known dashboard
+(clearly timestamped as stale) instead of a blank screen.
 
 Everything except the phone itself lives in this repo: the server in
 `src/main/remote/`, the PWA in `/remote` (its own subproject — Preact +
@@ -442,6 +482,23 @@ Each milestone runs end-to-end before the next begins. Commit per milestone.
 - [ ] Ctrl+A inside a live PowerShell prompt still moves the cursor to line start (not swallowed by the app's hidden Edit menu)
 - [ ] Ctrl+V works in the Monaco editor tab, the scratchpad, and plain dialog inputs (e.g. Edit Project Details' Name field)
 - [ ] Right-click in Monaco/the scratchpad still shows Monaco's own native menu (not doubled); right-click in the claude-chat tab shows a Cut/Copy/Paste menu
+
+### ShinShell Remote
+
+All of the below build clean (`tsc --noEmit` on both the desktop app and
+`remote/`, plus real `vite build`/`electron-vite build` runs) but are not
+yet exercised on a real phone over Tailscale — that's the actual bar for
+checking these off, not a clean build.
+
+- [ ] Two projects open, one Claude Code prompt waiting in each → both Mission Control cards update live (state dot, time-in-state, last-output lines) within one poll cycle, and the SSH dot reflects a real pulled Ethernet cable within ~30s
+- [ ] Tapping a WAITING push notification's **y**/**n** action (Chrome/Android) advances a real Claude Code prompt without the app ever opening; tapping the notification body itself (or on iOS, where actions don't render) opens straight into that session
+- [ ] A project's log-tail tab is reachable from its session view, clearly labeled "view only," streaming real `tail -f` output with no input bar present
+- [ ] With `remote.allowDeploy` on: a dangerous deploy command arms on first tap (3s accent countdown, correct host shown), fires on the second tap within the window, streams real output into a read-only view, and a completion push (green/red) arrives with the right exit code
+- [ ] Kill ShinShell → the app shows the offline ribbon, then "ShinShell offline since HH:MM" past ~15s, with the dashboard still showing the last-known cards (timestamped, not blank); relaunch ShinShell → the app reconnects unaided within a few seconds of the heartbeat/backoff loop noticing
+- [ ] Font size persists across an app restart on the same device; pinch-to-zoom and the A-/A+ buttons agree with each other
+- [ ] A custom quick-action snippet added in Settings appears in the session view immediately (no reload) and long-press previews its literal payload before sending
+- [ ] Paired-devices screen (phone Settings) correctly flags "this device" and revoking a *different* device logs it out without affecting the current session; revoking *this* device logs the current phone out too
+- [ ] iOS Safari (not yet added to Home Screen) shows the install banner on first load; after Add to Home Screen, push notifications actually arrive
 
 ## House rules (for Claude Code)
 
