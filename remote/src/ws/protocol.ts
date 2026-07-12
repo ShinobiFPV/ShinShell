@@ -50,6 +50,15 @@ export interface RemoteProject {
   sshHealth: RemoteSshHealth
 }
 
+// § actionable notifications (§3) — per-device push prefs, mirrors
+// server.ts's GET/POST /api/notifications/settings. mutedProjectIds is an
+// opt-out list (absence/empty = notify for everything); quietHours times
+// are "HH:MM" 24h strings in ShinShell's own local time zone.
+export interface NotificationSettings {
+  mutedProjectIds: string[]
+  quietHours: { start: string; end: string } | null
+}
+
 // § Mission Control (§1) — GET /api/health, polled for the dashboard's
 // slim footer (ShinShell version/uptime/PC name). No auth required (see
 // server.ts) so it resolves even before the "ShinShell reachable" check

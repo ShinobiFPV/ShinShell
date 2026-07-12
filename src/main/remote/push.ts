@@ -4,7 +4,13 @@
 // on the tailnet — only *opening* the notification (reaching ShinShell's
 // Tailscale-only origin) requires that.
 import webpush from 'web-push'
-import { loadRemoteState, saveRemoteState, type RemoteState, type PushSubscriptionJson } from './state'
+import {
+  loadRemoteState,
+  saveRemoteState,
+  type QuietHours,
+  type RemoteState,
+  type PushSubscriptionJson
+} from './state'
 
 const VAPID_SUBJECT = 'mailto:shinobifpv@gmail.com'
 
@@ -35,17 +41,45 @@ interface NotifyPayload {
   title: string
   body: string
   sessionId: string
+  /** Owning project, when there is one — gates per-device mute/quiet-hours
+   *  filtering below. Absent for cross-project pushes (e.g. the test
+   *  notification), which always go through unfiltered. */
+  projectId?: string
+}
+
+function isQuietNow(quietHours: QuietHours | null | undefined): boolean {
+  if (!quietHours) return false
+  const { startMinute, endMinute } = quietHours
+  if (startMinute === endMinute) return false // degenerate window — treat as off
+  const minutes = new Date().getHours() * 60 + new Date().getMinutes()
+  return startMinute < endMinute
+    ? minutes >= startMinute && minutes < endMinute
+    : minutes >= startMinute || minutes < endMinute // wraps midnight, e.g. 22:00–07:00
 }
 
 /** Sends to every paired device with a stored push subscription, in
  *  parallel — one dead subscription (device uninstalled the PWA, etc.)
  *  shouldn't block the others. Dead subscriptions (404/410, per the push
  *  service's own semantics for "this endpoint no longer exists") are
- *  pruned from remote.json. */
-export async function notifyAllDevices(payload: NotifyPayload): Promise<void> {
+ *  pruned from remote.json.
+ *
+ *  `bypassFilters` skips per-device mute/quiet-hours gating — used only by
+ *  the "send test notification" button, since a deliberate user action to
+ *  test push shouldn't get silently swallowed by whatever quiet-hours
+ *  window happens to be active right now. */
+export async function notifyAllDevices(
+  payload: NotifyPayload,
+  opts?: { bypassFilters?: boolean }
+): Promise<void> {
   ensureVapid()
   const state = loadRemoteState()
-  const targets = state.devices.filter((d) => d.pushSubscription)
+  const targets = state.devices.filter((d) => {
+    if (!d.pushSubscription) return false
+    if (opts?.bypassFilters) return true
+    if (payload.projectId && (d.notifyMutedProjectIds ?? []).includes(payload.projectId)) return false
+    if (isQuietNow(d.quietHours)) return false
+    return true
+  })
   if (targets.length === 0) return
 
   const results = await Promise.allSettled(

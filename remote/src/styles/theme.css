@@ -670,6 +670,33 @@ input {
   padding: 6px 8px;
 }
 
+.settings-project-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-project-toggle,
+.settings-quiet-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.settings-quiet-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.settings-quiet-range input[type='time'] {
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
 .settings-forget {
   color: #ff6b6b;
   border-color: #3a2020;

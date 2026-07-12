@@ -8,6 +8,11 @@ import { join, dirname } from 'path'
 // this codebase hand-rolls this per state file rather than sharing a
 // helper, so this does too.
 
+export interface QuietHours {
+  startMinute: number
+  endMinute: number
+}
+
 export interface RemoteDeviceRecord {
   id: string
   name?: string
@@ -17,6 +22,18 @@ export interface RemoteDeviceRecord {
   pushSubscription?: PushSubscriptionJson
   pairedAt: number
   lastSeenAt: number
+  /** § actionable notifications (§3) — per-device push prefs, opt-out by
+   *  design: empty/absent means "notify for every project," so a project
+   *  opened for the first time always starts audible and re-opening a
+   *  previously muted one keeps remembering the mute, with no ambiguity
+   *  about whether a project was even visible the last time this list was
+   *  edited (which an opt-*in* allow-list would have). */
+  notifyMutedProjectIds?: string[]
+  /** Evaluated against ShinShell's own local time zone (see push.ts) — the
+   *  desktop and the paired phone are assumed to be the same person in the
+   *  same time zone, so there's no cross-device clock to reconcile. Null =
+   *  disabled. */
+  quietHours?: QuietHours | null
 }
 
 export interface PushSubscriptionJson {

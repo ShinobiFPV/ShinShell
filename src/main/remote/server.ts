@@ -11,7 +11,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { WebSocketServer, WebSocket } from 'ws'
 import { app as electronApp } from 'electron'
 import { getTailscaleSelf, issueCert, type TailscaleSelf } from './tailscale'
-import { loadRemoteState, saveRemoteState, type PushSubscriptionJson } from './state'
+import { loadRemoteState, saveRemoteState, type PushSubscriptionJson, type QuietHours } from './state'
 import { verifyToken, submitPin, type PairResult } from './pairing'
 import { ensureVapid, getVapidPublicKey, notifyAllDevices } from './push'
 import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents } from '../pty'
@@ -25,7 +25,6 @@ import type { RemoteStatus, PtyDataEvent, PtyExitEvent, SshHealthStatus } from '
 const PORT = 8443
 const CERT_RENEW_INTERVAL_MS = 24 * 60 * 60 * 1000
 const AUTH_GRACE_MS = 5000
-const PUSH_RATE_LIMIT_MS = 30_000
 
 const KEY_BYTES: Record<string, string> = {
   enter: '\r',
@@ -54,7 +53,6 @@ interface ClientConn {
 let runtime: Runtime | null = null
 let lastError: string | null = null
 const connections = new Set<ClientConn>()
-const lastPushAt = new Map<string, number>()
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -122,6 +120,33 @@ function aggregateProjectState(claudeTabIds: string[]): ProjectAggregate {
     }
   }
   return { state: winnerState, stateSince: winnerSince, lastLines: lastNonBlankLines(getScrollback(winnerId), 2) }
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, '0')
+}
+
+function quietHoursToClock(q: QuietHours): { start: string; end: string } {
+  return {
+    start: `${pad2(Math.floor(q.startMinute / 60))}:${pad2(q.startMinute % 60)}`,
+    end: `${pad2(Math.floor(q.endMinute / 60))}:${pad2(q.endMinute % 60)}`
+  }
+}
+
+function clockMinutes(clock: string): number | null {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(clock)
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+function clockToQuietHours(body: unknown): QuietHours | null {
+  if (typeof body !== 'object' || body === null) return null
+  const { start, end } = body as { start?: unknown; end?: unknown }
+  if (typeof start !== 'string' || typeof end !== 'string') return null
+  const startMinute = clockMinutes(start)
+  const endMinute = clockMinutes(end)
+  if (startMinute === null || endMinute === null) return null
+  return { startMinute, endMinute }
 }
 
 function getPwaDistDir(): string {
@@ -252,6 +277,59 @@ function buildApp(): express.Express {
     res.json({ ok: true })
   })
 
+  // § actionable notifications (§3) — per-device (not global) mute list +
+  // quiet-hours window, read/written by the paired phone's own Settings
+  // screen. Per-device rather than one shared setting because push
+  // subscriptions are already per-device: a tablet that's always on charger
+  // might want every project audible while a phone wants Q2 only and no
+  // 2am pings.
+  expressApp.get('/api/notifications/settings', (req: Request & { deviceId?: string }, res) => {
+    const state = loadRemoteState()
+    const device = state.devices.find((d) => d.id === req.deviceId)
+    if (!device) {
+      res.status(404).json({ error: 'device not found' })
+      return
+    }
+    res.json({
+      mutedProjectIds: device.notifyMutedProjectIds ?? [],
+      quietHours: device.quietHours ? quietHoursToClock(device.quietHours) : null
+    })
+  })
+
+  expressApp.post('/api/notifications/settings', (req: Request & { deviceId?: string }, res) => {
+    const state = loadRemoteState()
+    const device = state.devices.find((d) => d.id === req.deviceId)
+    if (!device) {
+      res.status(404).json({ error: 'device not found' })
+      return
+    }
+    const body = (req.body ?? {}) as { mutedProjectIds?: unknown; quietHours?: unknown }
+
+    if (body.mutedProjectIds !== undefined) {
+      if (!Array.isArray(body.mutedProjectIds) || !body.mutedProjectIds.every((p) => typeof p === 'string')) {
+        res.status(400).json({ error: 'invalid mutedProjectIds' })
+        return
+      }
+      device.notifyMutedProjectIds = body.mutedProjectIds
+    }
+
+    if (body.quietHours !== undefined) {
+      if (body.quietHours === null) {
+        device.quietHours = null
+      } else {
+        const parsed = clockToQuietHours(body.quietHours)
+        if (!parsed) {
+          res.status(400).json({ error: 'invalid quietHours' })
+          return
+        }
+        device.quietHours = parsed
+      }
+    }
+
+    saveRemoteState(state)
+    res.json({ ok: true })
+  })
+
   expressApp.use(express.static(pwaDistDir))
   expressApp.use((req, res) => {
     if (req.path.startsWith('/api')) {
@@ -376,18 +454,21 @@ waitEvents.on('state', (e: { id: string; status: string }) => {
   if (e.status === 'waiting') void handleWaitingTransition(e.id)
 })
 
+/** § actionable notifications (§3) — "never notify twice for the same
+ *  WAITING episode" falls straight out of waitDetector's own invariant
+ *  rather than needing a time-based rate limit here: setStatus() only ever
+ *  emits a 'state' event on an *actual* transition (it early-returns on a
+ *  same-status re-check), so this handler runs exactly once per busy/idle→
+ *  waiting transition — i.e. once per episode, by construction — and a
+ *  *new* episode (session goes back to busy, then waits again) correctly
+ *  gets its own push instead of being swallowed by a cooldown window. */
 async function handleWaitingTransition(sessionId: string): Promise<void> {
-  const now = Date.now()
-  const last = lastPushAt.get(sessionId) ?? 0
-  if (now - last < PUSH_RATE_LIMIT_MS) return
-  lastPushAt.set(sessionId, now)
-
   const meta = getSessionMeta(sessionId)
   if (!meta) return
   const projectId = getProjectIdForWindow(meta.windowId)
   const project = projectId ? getProject(projectId) : undefined
   const body = project ? `${project.name}: Claude Code needs input` : 'Claude Code needs input'
-  await notifyAllDevices({ title: 'Claude is waiting', body, sessionId })
+  await notifyAllDevices({ title: 'Claude is waiting', body, sessionId, projectId })
 }
 
 // ---------------------------------------------------------------------------
@@ -497,9 +578,14 @@ export function getRemoteStatus(): RemoteStatus {
 }
 
 export async function sendTestNotification(): Promise<void> {
-  await notifyAllDevices({
-    title: 'ShinShell Remote',
-    body: 'Test notification — if you see this, push is working.',
-    sessionId: 'test'
-  })
+  // bypassFilters — a deliberate "send test" click shouldn't get silently
+  // swallowed by whatever quiet-hours window happens to be active.
+  await notifyAllDevices(
+    {
+      title: 'ShinShell Remote',
+      body: 'Test notification — if you see this, push is working.',
+      sessionId: 'test'
+    },
+    { bypassFilters: true }
+  )
 }

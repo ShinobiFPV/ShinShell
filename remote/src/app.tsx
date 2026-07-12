@@ -5,9 +5,10 @@ import Dashboard from './components/Dashboard'
 import SessionList from './components/SessionList'
 import TerminalView from './components/TerminalView'
 import { MultiplexClient } from './ws/MultiplexClient'
-import type { RemoteHealth, RemoteProject } from './ws/protocol'
+import type { NotificationSettings, RemoteHealth, RemoteProject } from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
 import { loadCustomActions, saveCustomActions, type CustomAction } from './localSettings'
+import { idbSet, idbDelete } from './idb'
 
 const STORAGE_KEY = 'shinshell-remote-pairing'
 const PROJECTS_POLL_MS = 5000
@@ -89,14 +90,121 @@ function QuickActionsEditor({
   )
 }
 
+const DEFAULT_QUIET_HOURS = { start: '22:00', end: '07:00' }
+
+function NotificationSettingsSection({ projects }: { projects: RemoteProject[] }): JSX.Element {
+  const [settings, setSettings] = useState<NotificationSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const pairing = loadPairing()
+    if (!pairing) return
+    fetch(`${pairing.serverUrl}/api/notifications/settings`, {
+      headers: { Authorization: `Bearer ${pairing.token}` }
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<NotificationSettings>) : null))
+      .then((s) => setSettings(s ?? { mutedProjectIds: [], quietHours: null }))
+      .catch(() => setSettings({ mutedProjectIds: [], quietHours: null }))
+  }, [])
+
+  const save = useCallback(async (next: NotificationSettings) => {
+    setSettings(next)
+    const pairing = loadPairing()
+    if (!pairing) return
+    setSaving(true)
+    try {
+      await fetch(`${pairing.serverUrl}/api/notifications/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairing.token}` },
+        body: JSON.stringify(next)
+      })
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  if (!settings) {
+    return (
+      <div class="settings-section">
+        <h3>Notifications</h3>
+        <p class="settings-note">Loading…</p>
+      </div>
+    )
+  }
+
+  const toggleProject = (id: string): void => {
+    const muted = new Set(settings.mutedProjectIds)
+    if (muted.has(id)) muted.delete(id)
+    else muted.add(id)
+    void save({ ...settings, mutedProjectIds: [...muted] })
+  }
+
+  const toggleQuietHours = (): void => {
+    void save({ ...settings, quietHours: settings.quietHours ? null : DEFAULT_QUIET_HOURS })
+  }
+
+  return (
+    <div class="settings-section">
+      <h3>Notifications{saving ? ' · saving…' : ''}</h3>
+      {projects.length === 0 ? (
+        <p class="settings-note">No projects open right now — toggles appear once one is.</p>
+      ) : (
+        <div class="settings-project-toggles">
+          {projects.map((p) => (
+            <label class="settings-project-toggle" key={p.id}>
+              <input
+                type="checkbox"
+                checked={!settings.mutedProjectIds.includes(p.id)}
+                onChange={() => toggleProject(p.id)}
+              />
+              <span style={{ color: p.accentColor }}>{p.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <label class="settings-quiet-toggle">
+        <input type="checkbox" checked={settings.quietHours !== null} onChange={toggleQuietHours} />
+        Quiet hours
+      </label>
+      {settings.quietHours && (
+        <div class="settings-quiet-range">
+          <input
+            type="time"
+            value={settings.quietHours.start}
+            onInput={(e) =>
+              void save({
+                ...settings,
+                quietHours: { ...settings.quietHours!, start: (e.target as HTMLInputElement).value }
+              })
+            }
+          />
+          <span>to</span>
+          <input
+            type="time"
+            value={settings.quietHours.end}
+            onInput={(e) =>
+              void save({
+                ...settings,
+                quietHours: { ...settings.quietHours!, end: (e.target as HTMLInputElement).value }
+              })
+            }
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SettingsOverlay({
   customActions,
   onChangeCustomActions,
+  projects,
   onClose,
   onForget
 }: {
   customActions: CustomAction[]
   onChangeCustomActions: (actions: CustomAction[]) => void
+  projects: RemoteProject[]
   onClose: () => void
   onForget: () => void
 }): JSX.Element {
@@ -136,6 +244,8 @@ function SettingsOverlay({
 
         <QuickActionsEditor customActions={customActions} onChange={onChangeCustomActions} />
 
+        <NotificationSettingsSection projects={projects} />
+
         <button class="settings-forget" onClick={onForget}>
           Forget this device
         </button>
@@ -172,6 +282,14 @@ export default function App(): JSX.Element {
     setCustomActionsState(actions)
     saveCustomActions(actions)
   }, [])
+
+  // § actionable notifications (§3) — mirror the pairing into IndexedDB so
+  // sw.ts's notificationclick handler can POST a y/n reply without a page
+  // (and hence without localStorage access) ever being open.
+  useEffect(() => {
+    if (pairing) void idbSet('pairing', pairing)
+    else void idbDelete('pairing')
+  }, [pairing])
 
   useEffect(() => {
     if (!pairing) return
@@ -322,6 +440,7 @@ export default function App(): JSX.Element {
         <SettingsOverlay
           customActions={customActions}
           onChangeCustomActions={setCustomActions}
+          projects={projects}
           onClose={() => setSettingsOpen(false)}
           onForget={forgetDevice}
         />
