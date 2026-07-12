@@ -10,6 +10,10 @@ interface TabStripProps {
   onNewTabKind: (kind: TabKind) => void
   /** §UX3 — tabs whose last run failed; cleared once the tab is reselected. */
   failedTabIds: Set<string>
+  /** §6.12 — opens the same Ctrl+Shift+P command palette, pre-filtered to
+   *  the "new tab" entries. Lives inside the tab strip, so the top-bar
+   *  contract (tabs + ADMIN + health dot only) is unaffected. */
+  onOpenTabPalette: () => void
 }
 
 const GIT_POLL_INTERVAL_MS = 30_000
@@ -84,7 +88,8 @@ export default function TabStrip({
   onSelect,
   onClose,
   onNewTabKind,
-  failedTabIds
+  failedTabIds,
+  onOpenTabPalette
 }: TabStripProps): JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -140,6 +145,9 @@ export default function TabStrip({
       )}
       <button className="tab-new" onMouseDown={() => onNewTabKind('terminal')} title="New terminal (Ctrl+T) — other tab kinds: Ctrl+Shift+P">
         +
+      </button>
+      <button className="tab-more" onMouseDown={onOpenTabPalette} title="More tab types (Ctrl+Shift+P)">
+        &hellip;
       </button>
     </div>
   )

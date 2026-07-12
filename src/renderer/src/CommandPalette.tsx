@@ -11,30 +11,51 @@ export interface PaletteAction {
 interface CommandPaletteProps {
   actions: PaletteAction[]
   onClose: () => void
+  /** §6.12 "more tabs" launcher — when set, the palette opens scoped to just
+   *  these action ids (a visible, clearable chip) instead of the full list.
+   *  The text query still fuzzy-searches within that scope. */
+  initialFilterIds?: string[]
+  /** Label shown on the filter chip, e.g. "New tab". Ignored if
+   *  `initialFilterIds` is unset. */
+  filterLabel?: string
 }
 
 // §6.11 — Ctrl+Shift+P fuzzy palette over saved commands, tab actions, and
 // project switching. `actions` is pre-built by the caller (ProjectWindow),
 // which already owns the closures for running commands / creating tabs /
 // switching projects.
-export default function CommandPalette({ actions, onClose }: CommandPaletteProps): JSX.Element {
+export default function CommandPalette({
+  actions,
+  onClose,
+  initialFilterIds,
+  filterLabel
+}: CommandPaletteProps): JSX.Element {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
+  const [filterActive, setFilterActive] = useState(Boolean(initialFilterIds))
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
+  const scopedActions = useMemo(
+    () =>
+      filterActive && initialFilterIds
+        ? actions.filter((a) => initialFilterIds.includes(a.id))
+        : actions,
+    [actions, filterActive, initialFilterIds]
+  )
+
   const matches = useMemo(() => {
-    if (!query) return actions.slice(0, 50)
-    return actions
+    if (!query) return scopedActions.slice(0, 50)
+    return scopedActions
       .map((a) => ({ action: a, score: fuzzyScore(query, `${a.category} ${a.label}`) }))
       .filter((m): m is { action: PaletteAction; score: number } => m.score !== null)
       .sort((a, b) => b.score - a.score)
       .map((m) => m.action)
       .slice(0, 50)
-  }, [actions, query])
+  }, [scopedActions, query])
 
   useEffect(() => {
     setSelected(0)
@@ -51,6 +72,21 @@ export default function CommandPalette({ actions, onClose }: CommandPaletteProps
   return (
     <div className="command-picker-backdrop" onMouseDown={onClose}>
       <div className="palette" onMouseDown={(e) => e.stopPropagation()}>
+        {filterActive && filterLabel && (
+          <div className="palette-filter-chip">
+            <span>{filterLabel}</span>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                setFilterActive(false)
+                inputRef.current?.focus()
+              }}
+              aria-label={`Clear "${filterLabel}" filter`}
+            >
+              &times;
+            </button>
+          </div>
+        )}
         <input
           ref={inputRef}
           className="palette-input"
@@ -61,6 +97,9 @@ export default function CommandPalette({ actions, onClose }: CommandPaletteProps
             if (e.key === 'Escape') {
               e.preventDefault()
               onClose()
+            } else if (e.key === 'Backspace' && query === '' && filterActive) {
+              e.preventDefault()
+              setFilterActive(false)
             } else if (e.key === 'ArrowDown') {
               e.preventDefault()
               setSelected((s) => Math.min(s + 1, matches.length - 1))

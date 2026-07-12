@@ -7,6 +7,7 @@ import {
   type BackgroundCommandOptions,
   type ViewBounds,
   type ClaudeChatNavState,
+  type ClaudeChatAuthHint,
   type DeployRun,
   type SshHealthStatus,
   type PortEntry,
@@ -103,6 +104,11 @@ const api = {
       const listener = (_event: Electron.IpcRendererEvent, payload: ClaudeChatNavState): void => cb(payload)
       ipcRenderer.on(IPC.claudeChatNavState, listener)
       return () => ipcRenderer.removeListener(IPC.claudeChatNavState, listener)
+    },
+    onAuthHint: (cb: (e: ClaudeChatAuthHint) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ClaudeChatAuthHint): void => cb(payload)
+      ipcRenderer.on(IPC.claudeChatAuthHint, listener)
+      return () => ipcRenderer.removeListener(IPC.claudeChatAuthHint, listener)
     }
   },
   files: {

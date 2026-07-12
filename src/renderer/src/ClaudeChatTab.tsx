@@ -9,17 +9,22 @@ interface ClaudeChatTabProps {
 export default function ClaudeChatTab({ tabId, active }: ClaudeChatTabProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const [nav, setNav] = useState<ClaudeChatNavState | null>(null)
+  const [authHint, setAuthHint] = useState<string | null>(null)
 
   // Create once per tab; the underlying WebContentsView (and its login
   // session — persist:claude-chat, §6.3) outlives tab switches, only
   // destroyed when the tab itself closes.
   useEffect(() => {
     window.shinshell.claudeChat.create(tabId)
-    const off = window.shinshell.claudeChat.onNavState((e) => {
+    const offNav = window.shinshell.claudeChat.onNavState((e) => {
       if (e.id === tabId) setNav(e)
     })
+    const offAuthHint = window.shinshell.claudeChat.onAuthHint((e) => {
+      if (e.id === tabId) setAuthHint(e.message)
+    })
     return () => {
-      off()
+      offNav()
+      offAuthHint()
       window.shinshell.claudeChat.destroy(tabId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -52,25 +57,45 @@ export default function ClaudeChatTab({ tabId, active }: ClaudeChatTabProps): JS
       <div className="claude-chat-toolbar">
         <button
           disabled={!nav?.canGoBack}
-          onClick={() => window.shinshell.claudeChat.back(tabId)}
+          onClick={() => {
+            setAuthHint(null)
+            window.shinshell.claudeChat.back(tabId)
+          }}
           title="Back"
         >
           ←
         </button>
         <button
           disabled={!nav?.canGoForward}
-          onClick={() => window.shinshell.claudeChat.forward(tabId)}
+          onClick={() => {
+            setAuthHint(null)
+            window.shinshell.claudeChat.forward(tabId)
+          }}
           title="Forward"
         >
           →
         </button>
-        <button onClick={() => window.shinshell.claudeChat.reload(tabId)} title="Reload">
+        <button
+          onClick={() => {
+            setAuthHint(null)
+            window.shinshell.claudeChat.reload(tabId)
+          }}
+          title="Reload"
+        >
           ⟳
         </button>
         <span className="claude-chat-title">
           {nav?.loading ? 'Loading…' : nav?.title || 'Claude'}
         </span>
       </div>
+      {authHint && (
+        <div className="claude-chat-auth-hint">
+          <span>{authHint}</span>
+          <button onClick={() => setAuthHint(null)} aria-label="Dismiss">
+            &times;
+          </button>
+        </div>
+      )}
       <div ref={containerRef} className="claude-chat-container" />
     </div>
   )

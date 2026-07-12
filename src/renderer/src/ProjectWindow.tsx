@@ -38,6 +38,19 @@ const nextId = (prefix: string): string => `${prefix}-${Date.now()}-${idCounter+
 // the same trigger within this window fires it, otherwise it silently disarms.
 const ARM_WINDOW_MS = 3000
 
+// §6.12 — the "new tab" subset the tab strip's chevron button pre-filters
+// the palette to; matches the palette action ids built below. Deliberately
+// excludes 'tab-terminal' (already has its own "+" button) and 'tab-ports'
+// (not a tab *type* pick the way these are — it's a singleton panel).
+const NEW_TAB_PALETTE_IDS = [
+  'tab-claude-chat',
+  'tab-claude-code',
+  'tab-editor',
+  'tab-scratchpad',
+  'tab-log-tail',
+  'tab-deploy'
+]
+
 export interface ArmedCommand {
   id: string
   summary: string
@@ -99,6 +112,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   const [activeTabId, setActiveTabId] = useState<string>('')
   const [logPickerOpen, setLogPickerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteFiltered, setPaletteFiltered] = useState(false)
   const [otherProjects, setOtherProjects] = useState<ProjectConfig[]>([])
   const [armed, setArmed] = useState<ArmedCommand | null>(null)
   const [failedTabIds, setFailedTabIds] = useState<Set<string>>(new Set())
@@ -247,6 +261,13 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
   )
 
   const newTab = useCallback(() => newTabOfKind('terminal'), [newTabOfKind])
+
+  // §6.12 — the tab strip's chevron button: same palette Ctrl+Shift+P opens,
+  // just pre-scoped to the "new tab" entries.
+  const openTabPalette = useCallback(() => {
+    setPaletteFiltered(true)
+    setPaletteOpen(true)
+  }, [])
 
   const createLogTailTab = useCallback(
     (cmd: ProjectCommand) => {
@@ -534,6 +555,7 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
         setSidebarExpanded((v) => !v)
       } else if (e.shiftKey && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault()
+        setPaletteFiltered(false)
         setPaletteOpen((v) => !v)
       } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault()
@@ -601,13 +623,21 @@ export default function ProjectWindow({ projectId }: ProjectWindowProps): JSX.El
           onClose={closeTab}
           onNewTabKind={newTabOfKind}
           failedTabIds={failedTabIds}
+          onOpenTabPalette={openTabPalette}
         />
         <SshHealthLight projectId={projectId} hasTarget={hasHealthTarget} />
         <AdminBadge />
       </div>
       {armed && <ArmedCommandBanner summary={armed.summary} />}
       <Toast toasts={toasts} onDismiss={dismissToast} />
-      {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && (
+        <CommandPalette
+          actions={paletteActions}
+          onClose={() => setPaletteOpen(false)}
+          initialFilterIds={paletteFiltered ? NEW_TAB_PALETTE_IDS : undefined}
+          filterLabel="New tab"
+        />
+      )}
       {logPickerOpen && (
         <div className="command-picker-backdrop" onMouseDown={() => setLogPickerOpen(false)}>
           <div className="command-picker" onMouseDown={(e) => e.stopPropagation()}>

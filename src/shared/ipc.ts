@@ -34,6 +34,7 @@ export const IPC = {
   claudeChatReload: 'claudeChat:reload',
   claudeChatDestroy: 'claudeChat:destroy',
   claudeChatNavState: 'claudeChat:navState',
+  claudeChatAuthHint: 'claudeChat:authHint',
   filesRead: 'files:read',
   filesWrite: 'files:write',
   filesShowOpenDialog: 'files:showOpenDialog',
@@ -117,6 +118,15 @@ export interface ClaudeChatNavState {
   title: string
   url: string
   loading: boolean
+}
+
+/** Pushed when Google's sign-in flow (or claude.ai itself) lands on a page
+ *  that looks like an auth rejection (e.g. "disallowed_useragent") — the
+ *  tab surfaces `message` as a dismissible hint pointing at email-code
+ *  login instead of leaving the user stuck on a dead-end error page. */
+export interface ClaudeChatAuthHint {
+  id: string
+  message: string
 }
 
 export interface DeployRun {
