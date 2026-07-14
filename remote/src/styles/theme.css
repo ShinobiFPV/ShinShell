@@ -7,11 +7,22 @@ html,
 body,
 #app {
   height: 100%;
+  /* iOS Safari sometimes lays the page out against a provisional viewport
+     size before its chrome (address bar, safe-area insets) has settled —
+     100vh/100vw can be briefly wrong on cold load and only self-correct on
+     an orientation change, which forces a full remeasure. 100dvh tracks the
+     browser's *current* viewport instead of a stale snapshot; the
+     duplicate height decl is a progressive-enhancement fallback (browsers
+     that don't understand dvh just ignore the invalid line and keep 100%). */
+  height: 100dvh;
   /* Belt-and-suspenders against the page itself ever becoming
-     horizontally scrollable — the app's own layout should always fit
-     100vw; if something misbehaves it should clip, not drag sideways. */
+     horizontally scrollable — the app's own layout should always fit its
+     container; if something misbehaves it should clip, not drag sideways.
+     max-width is % (not vw) for the same provisional-viewport reason as
+     100dvh above — vw is a raw viewport measurement subject to the same
+     stale-on-load bug, % is always relative to the actual parent box. */
   overflow-x: hidden;
-  max-width: 100vw;
+  max-width: 100%;
 }
 
 body {
