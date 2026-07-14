@@ -1,6 +1,6 @@
 {
   "name": "shinshell",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Always-elevated Windows desktop shell unifying a dev pipeline into one tabbed workspace: PowerShell terminals, embedded Claude chat/Code, Monaco editor, one-keystroke deploys with SSH health + log-tail, a ports panel, and a fuzzy command palette. Zero-UAC elevation via a Scheduled Task.",
   "main": "./out/main/index.js",
   "author": "ShinTech Electronics",
