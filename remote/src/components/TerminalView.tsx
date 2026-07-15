@@ -82,6 +82,13 @@ export default function TerminalView({
   const [historyPos, setHistoryPos] = useState<number | null>(null)
   const [prompt, setPrompt] = useState<ParsedPrompt | null>(null)
   const promptRef = useRef<ParsedPrompt | null>(null)
+  // § stacked-prompt garbling fix -- ink's cursor-relative redraws can drift
+  // out of sync with xterm's buffer over a long-lived session (worse the
+  // more consecutive prompts it's redrawn over), and the only reliable
+  // recovery so far is a full remount: fresh xterm, fresh scrollback replay.
+  // Previously only reachable by leaving the tab and coming back; bumping
+  // this forces the mount effect below to re-run in place instead.
+  const [remountKey, setRemountKey] = useState(0)
   // § size-mismatch fix -- the pty's *real* cols/rows, reported by the
   // server (see MultiplexClient's onResize). Both dimensions matter, not
   // just cols: ink redraws its live region (permission prompts, spinners)
@@ -210,7 +217,7 @@ export default function TerminalView({
       fitAddonRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fontSize is only the *initial* value; later changes go through applyFontSize
-  }, [tabId, client])
+  }, [tabId, client, remountKey])
 
   // Two-finger pinch → font size. `touch-action: none` on the canvas (see
   // theme.css) stops the browser's own page-zoom from fighting this.
@@ -315,6 +322,13 @@ export default function TerminalView({
           <span class="font-size-value">{fontSize}</span>
           <button class="font-size-btn" onClick={() => applyFontSize(fontSize + 1)} title="Larger text">
             A+
+          </button>
+          <button
+            class="font-size-btn"
+            onClick={() => setRemountKey((k) => k + 1)}
+            title="Reset view (fixes garbled/overlapping text after several prompts)"
+          >
+            ↻
           </button>
         </div>
         {!atBottom && (
