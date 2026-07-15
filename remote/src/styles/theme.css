@@ -1,3 +1,21 @@
+/* Claude Code's TUI spinner uses Braille Pattern glyphs (U+2800-28FF), a
+   block that's absent from iOS/Android's system monospace fonts and from
+   xterm's own customGlyphs renderer (which only draws box-drawing/block
+   chars, U+2500-259F). Left alone, the browser silently substitutes some
+   other installed font for just that glyph, whose different advance width
+   throws off every character after it on the line — see TerminalView.tsx's
+   TERMINAL_FONT_FAMILY. Rather than trust whatever happens to be on a given
+   phone, this is a self-hosted, subset-to-256-glyphs slice of JuliaMono
+   (SIL OFL 1.1 — see remote/public/fonts/juliamono-braille-LICENSE.txt),
+   restricted via unicode-range so it's only ever fetched/used for that one
+   block. */
+@font-face {
+  font-family: 'JuliaMono Braille Subset';
+  src: url('/fonts/juliamono-braille.woff2') format('woff2');
+  unicode-range: U+2800-28FF;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
   min-width: 0;
@@ -579,14 +597,28 @@ input {
   overflow-x: auto;
 }
 
-.terminal-quick-actions-custom {
+.terminal-quick-actions button {
+  min-width: 48px;
+  min-height: 40px;
+  padding: 10px 14px;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.terminal-arrow-row {
   padding-top: 0;
   border-top: none;
 }
 
-.terminal-quick-actions button {
-  min-width: 44px;
-  white-space: nowrap;
+.terminal-arrow-row .quick-action-wrap {
+  flex: 1;
+}
+
+.terminal-arrow-row button {
+  width: 100%;
+  min-height: 46px;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .quick-action-wrap {

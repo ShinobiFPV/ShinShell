@@ -29,11 +29,25 @@ const SCROLLBACK_LINES = 5000
 const QUICK_KEYS: { label: string; key: string; preview: string }[] = [
   { label: 'Enter', key: 'enter', preview: 'Sends: Enter' },
   { label: 'Esc', key: 'esc', preview: 'Sends: Escape' },
-  { label: '↑', key: 'up', preview: 'Sends: Up arrow' },
-  { label: '↓', key: 'down', preview: 'Sends: Down arrow' },
   { label: 'y', key: 'y', preview: 'Sends: "y"' },
   { label: 'n', key: 'n', preview: 'Sends: "n"' }
 ]
+
+const ARROW_KEYS: { label: string; key: string; preview: string }[] = [
+  { label: '↑', key: 'up', preview: 'Sends: Up arrow' },
+  { label: '↓', key: 'down', preview: 'Sends: Down arrow' },
+  { label: '←', key: 'left', preview: 'Sends: Left arrow' },
+  { label: '→', key: 'right', preview: 'Sends: Right arrow' }
+]
+
+// Matches the monospace stack used elsewhere in the app (theme.css), plus
+// the self-hosted Braille-only subset font (see its @font-face in theme.css)
+// so Claude Code's spinner — which uses Braille Pattern glyphs, a block
+// xterm's customGlyphs renderer doesn't cover and iOS/Android don't ship a
+// system font for — always resolves to the same bundled glyphs instead of
+// whatever a given phone happens to fall back to.
+const TERMINAL_FONT_FAMILY =
+  '"JuliaMono Braille Subset", ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace'
 
 function touchDistance(touches: TouchList): number {
   const [a, b] = [touches[0], touches[1]]
@@ -82,6 +96,7 @@ export default function TerminalView({
 
     const xterm = new XTerm({
       fontSize,
+      fontFamily: TERMINAL_FONT_FAMILY,
       scrollback: SCROLLBACK_LINES,
       cursorBlink: false,
       convertEol: true,
@@ -232,20 +247,21 @@ export default function TerminalView({
             {QUICK_KEYS.map((k) => (
               <QuickActionButton key={k.key} label={k.label} preview={k.preview} onPress={() => sendKey(k.key)} />
             ))}
+            {customActions.map((a) => (
+              <QuickActionButton
+                key={a.id}
+                label={a.label}
+                preview={`Sends: "${a.value}" + Enter`}
+                onPress={() => sendCustomAction(a.value)}
+              />
+            ))}
           </div>
 
-          {customActions.length > 0 && (
-            <div class="terminal-quick-actions terminal-quick-actions-custom">
-              {customActions.map((a) => (
-                <QuickActionButton
-                  key={a.id}
-                  label={a.label}
-                  preview={`Sends: "${a.value}" + Enter`}
-                  onPress={() => sendCustomAction(a.value)}
-                />
-              ))}
-            </div>
-          )}
+          <div class="terminal-quick-actions terminal-arrow-row">
+            {ARROW_KEYS.map((k) => (
+              <QuickActionButton key={k.key} label={k.label} preview={k.preview} onPress={() => sendKey(k.key)} />
+            ))}
+          </div>
 
           <form
             class="terminal-input-row"

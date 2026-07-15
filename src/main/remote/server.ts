@@ -47,6 +47,8 @@ const KEY_BYTES: Record<string, string> = {
   esc: '\x1b',
   up: '\x1b[A',
   down: '\x1b[B',
+  left: '\x1b[D',
+  right: '\x1b[C',
   y: 'y',
   n: 'n',
   'ctrl-c': '\x03'
