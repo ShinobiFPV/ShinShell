@@ -5,6 +5,7 @@ interface TabListeners {
   onData?: (payload: { data: string }) => void
   onState?: (payload: { status: WaitStatus }) => void
   onExit?: (payload: { exitCode: number }) => void
+  onResize?: (payload: { cols: number; rows: number }) => void
 }
 
 const RECONNECT_BASE_MS = 1000
@@ -134,6 +135,7 @@ export class MultiplexClient {
     else if (frame.type === 'data') listeners.onData?.({ data: frame.data })
     else if (frame.type === 'state') listeners.onState?.({ status: frame.status })
     else if (frame.type === 'exit') listeners.onExit?.({ exitCode: frame.exitCode })
+    else if (frame.type === 'resize') listeners.onResize?.({ cols: frame.cols, rows: frame.rows })
   }
 
   private notifyConnection(connected: boolean): void {

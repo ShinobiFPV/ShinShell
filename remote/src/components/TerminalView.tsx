@@ -82,26 +82,67 @@ export default function TerminalView({
   const [historyPos, setHistoryPos] = useState<number | null>(null)
   const [prompt, setPrompt] = useState<ParsedPrompt | null>(null)
   const promptRef = useRef<ParsedPrompt | null>(null)
+  // § size-mismatch fix -- the pty's *real* cols/rows, reported by the
+  // server (see MultiplexClient's onResize). Both dimensions matter, not
+  // just cols: ink redraws its live region (permission prompts, spinners)
+  // by moving the cursor up N rows and overwriting, entirely independent of
+  // terminal width -- but that cursor-up is clamped at row 0 of the
+  // *current screen*, whose height is xterm.js's own `rows`. If the phone's
+  // xterm has fewer rows than ink's redraw region needs (very likely if
+  // rows is fit to the phone's small container instead of the real pty),
+  // the clamp makes each redraw overwrite the wrong lines in place -- which
+  // reads as exactly what it is: readable text, scrambled vertically.
+  const realSizeRef = useRef<{ cols: number; rows: number } | null>(null)
 
-  const applyFontSize = useCallback((size: number) => {
-    const clamped = clampFontSize(size)
-    setFontSize(clamped)
-    saveFontSize(clamped)
+  // Fit to the container as usual until the real size is known, then lock
+  // both cols and rows to it -- see realSizeRef above. Used on mount, on
+  // container resize, and on font-size change (pinch/A-/A+), replacing bare
+  // `fitAddon.fit()` calls everywhere. Once locked, the rendered terminal
+  // block may be taller than the visible container -- see the
+  // overflow-y/touch-action rule on .terminal-view-canvas in theme.css,
+  // which makes that reachable by scroll instead of letting it clip or spill
+  // into the UI below.
+  const refit = useCallback(() => {
     const xterm = xtermRef.current
-    if (xterm) {
-      xterm.options.fontSize = clamped
-      fitAddonRef.current?.fit()
+    const fitAddon = fitAddonRef.current
+    if (!xterm || !fitAddon) return
+    const real = realSizeRef.current
+    if (real) {
+      if (xterm.cols !== real.cols || xterm.rows !== real.rows) {
+        xterm.resize(real.cols, real.rows)
+      }
+      return
+    }
+    const proposed = fitAddon.proposeDimensions()
+    if (proposed && (xterm.cols !== proposed.cols || xterm.rows !== proposed.rows)) {
+      xterm.resize(proposed.cols, proposed.rows)
     }
   }, [])
+
+  const applyFontSize = useCallback(
+    (size: number) => {
+      const clamped = clampFontSize(size)
+      setFontSize(clamped)
+      saveFontSize(clamped)
+      const xterm = xtermRef.current
+      if (xterm) {
+        xterm.options.fontSize = clamped
+        refit()
+      }
+    },
+    [refit]
+  )
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     // A tab switch remounts the terminal for a different session entirely --
-    // any permission prompt detected against the previous one is stale.
+    // any permission prompt detected against the previous one is stale, and
+    // so is any previously-known real pty size.
     promptRef.current = null
     setPrompt(null)
+    realSizeRef.current = null
 
     const xterm = new XTerm({
       fontSize,
@@ -144,12 +185,16 @@ export default function TerminalView({
       refreshPrompt()
     }
 
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit())
+    const resizeObserver = new ResizeObserver(() => refit())
     resizeObserver.observe(container)
 
     const unsubscribe = client.subscribe(tabId, {
       onScrollback: ({ data }) => xterm.write(data, onWrite),
       onData: ({ data }) => xterm.write(data, onWrite),
+      onResize: ({ cols, rows }) => {
+        realSizeRef.current = { cols, rows }
+        refit()
+      },
       onExit: ({ exitCode }) => {
         promptRef.current = null
         setPrompt(null)

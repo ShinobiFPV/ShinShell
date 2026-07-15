@@ -14,7 +14,7 @@ import { getTailscaleSelf, issueCert, type TailscaleSelf } from './tailscale'
 import { loadRemoteState, saveRemoteState, type PushSubscriptionJson, type QuietHours } from './state'
 import { verifyToken, submitPin, revokeDevice, type PairResult } from './pairing'
 import { ensureVapid, getVapidPublicKey, notifyAllDevices } from './push'
-import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents, spawnPty } from '../pty'
+import { getScrollback, getSessionMeta, getSessionSize, listSessionIds, writePty, ptyEvents, spawnPty } from '../pty'
 import { waitEvents, getStatus as getWaitStatus, getStateSince, type WaitStatus } from './waitDetector'
 import { stripAnsi } from './ansi'
 import {
@@ -29,7 +29,7 @@ import { getCachedHealth } from '../sshHealth'
 import { validateProjectPath } from '../projectValidation'
 import { substituteVariables } from '../../shared/commandSubstitution'
 import { appendDeployRun } from '../deployHistory'
-import type { RemoteStatus, PtyDataEvent, PtyExitEvent, SshHealthStatus, DeployRun } from '../../shared/ipc'
+import type { RemoteStatus, PtyDataEvent, PtyExitEvent, PtyResizeEvent, SshHealthStatus, DeployRun } from '../../shared/ipc'
 
 const PORT = 8443
 const CERT_RENEW_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -679,6 +679,15 @@ function handleClientMessage(conn: ClientConn, msg: Record<string, unknown>): vo
 function subscribeTab(conn: ClientConn, tabId: string): void {
   if (conn.subscriptions.has(tabId)) return
   conn.subscriptions.add(tabId)
+  // § cols-mismatch fix — tell the phone the pty's *real* cols/rows (owned
+  // by the desktop app's own xterm, see pty.ts's resizePty) *before* the
+  // scrollback replay below, so its own xterm.js is already matched by the
+  // time that replay renders instead of transiently rendering it at its own
+  // guessed cols first. A phone client rendering at the wrong cols
+  // interprets ink's cursor-column escape sequences against the wrong
+  // width, which is what made permission-prompt boxes render corrupted.
+  const size = getSessionSize(tabId)
+  if (size) send(conn.ws, { type: 'resize', tabId, cols: size.cols, rows: size.rows })
   send(conn.ws, { type: 'scrollback', tabId, data: getScrollback(tabId) })
   send(conn.ws, { type: 'state', tabId, status: getWaitStatus(tabId) })
 }
@@ -696,6 +705,15 @@ ptyEvents.on('exit', (e: PtyExitEvent) => {
       send(conn.ws, { type: 'exit', tabId: e.id, exitCode: e.exitCode })
       conn.subscriptions.delete(e.id)
     }
+  }
+})
+// § cols-mismatch fix — the desktop terminal resizing (window resize, split,
+// font change) changes the real pty's dimensions; forward that live so an
+// already-subscribed phone's xterm stays matched, not just at initial
+// subscribe time.
+ptyEvents.on('resize', (e: PtyResizeEvent) => {
+  for (const conn of connections) {
+    if (conn.subscriptions.has(e.id)) send(conn.ws, { type: 'resize', tabId: e.id, cols: e.cols, rows: e.rows })
   }
 })
 waitEvents.on('state', (e: { id: string; status: string }) => {

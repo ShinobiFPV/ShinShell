@@ -65,6 +65,11 @@ button {
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 13px;
+  /* Without this, a quick double-tap on any button (e.g. tapping an arrow
+     key twice in a row) is read by the browser as its double-tap-to-zoom
+     gesture instead of two taps. manipulation keeps single-tap/scroll
+     behavior but drops double-tap-zoom and pinch-zoom on the element. */
+  touch-action: manipulation;
 }
 
 button:disabled {
@@ -542,7 +547,15 @@ input {
   position: absolute;
   inset: 0;
   padding: 6px;
-  touch-action: none;
+  /* Once TerminalView locks xterm's rows to the real pty's (see
+     permissionPrompt.ts / TerminalView's refit()), the rendered terminal
+     block can be taller than this container -- scroll instead of clipping
+     or spilling into the quick-action bar below. pan-y (not the previous
+     `none`) keeps single-finger vertical scroll working natively while
+     still blocking the browser's own pinch-zoom, which the custom 2-finger
+     touchmove handler below (see TerminalView.tsx) already owns. */
+  overflow-y: auto;
+  touch-action: pan-y;
 }
 
 .terminal-toolbar {

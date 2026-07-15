@@ -107,6 +107,12 @@ export interface PtyExitEvent {
   exitCode: number
 }
 
+export interface PtyResizeEvent {
+  id: string
+  cols: number
+  rows: number
+}
+
 export interface BackgroundCommandOptions {
   command: string
   cwd: string

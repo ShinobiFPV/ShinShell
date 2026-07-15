@@ -19,14 +19,17 @@ export interface ParsedPrompt {
   selectedIndex: number
 }
 
-const SCAN_LINES = 20
+// Generous enough for a full diff/file-edit approval box (tool name +
+// command/patch + description), not just a one-line question -- see the
+// header-scan below.
+const SCAN_LINES = 100
+const MAX_HEADER_LINES = 80
 const FALLBACK_HEADER = 'Claude is asking:'
 
 // Matches an ink SelectInput option line, border chars and cursor marker
 // optional so reflow (border dropped/truncated) doesn't defeat detection --
 // only the `❯` marker on exactly one line (below) is load-bearing.
 const OPTION_RE = /^[│|]?\s*(❯)?\s*(\d+)\.\s*(.*?)\s*[│|]?$/
-const BORDER_ONLY_RE = /^[\s│|╭╮╰╯┌┐└┘─=+-]*$/
 
 function stripBorder(line: string): string {
   return line.replace(/^[│|\s]+/, '').replace(/[│|\s]+$/, '')
@@ -69,16 +72,24 @@ export function detectPermissionPrompt(term: XTerm): ParsedPrompt | null {
   const selectedIndex = collected.findIndex((o) => o.marker)
   if (selectedIndex === -1) return null
 
-  let header = FALLBACK_HEADER
-  for (let i = topMatchedLineIdx - 1; i >= Math.max(0, topMatchedLineIdx - 6); i--) {
-    const line = lines[i]
-    if (line.trim() === '' || BORDER_ONLY_RE.test(line)) continue
-    const stripped = stripBorder(line).trim()
-    if (stripped) {
-      header = stripped
-      break
-    }
+  // The full box body above the option list -- tool name, the actual
+  // command/diff, and any description -- not just the one-line question
+  // that happens to sit directly above the options. A prompt like Claude
+  // Code's Bash/Edit approval is several paragraphs tall; grabbing only the
+  // closest line above the options (the old behavior) silently dropped the
+  // one thing a human needs to read before tapping Yes -- what they're
+  // actually approving. Stops at the box's top border (╭/┌) so it doesn't
+  // bleed into unrelated output above the dialog.
+  const headerLines: string[] = []
+  const lowerBound = Math.max(0, topMatchedLineIdx - MAX_HEADER_LINES)
+  for (let i = topMatchedLineIdx - 1; i >= lowerBound; i--) {
+    const raw = lines[i]
+    if (/[╭┌]/.test(raw)) break
+    headerLines.unshift(stripBorder(raw).trimEnd())
   }
+  while (headerLines.length > 0 && headerLines[0] === '') headerLines.shift()
+  while (headerLines.length > 0 && headerLines[headerLines.length - 1] === '') headerLines.pop()
+  const header = headerLines.length > 0 ? headerLines.join('\n') : FALLBACK_HEADER
 
   return { header, options: collected.map((o) => ({ label: o.label })), selectedIndex }
 }

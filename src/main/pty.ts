@@ -1,7 +1,7 @@
 import * as pty from 'node-pty'
 import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
-import { IPC, type PtyDataEvent, type PtyExitEvent, type PtySpawnOptions } from '../shared/ipc'
+import { IPC, type PtyDataEvent, type PtyExitEvent, type PtyResizeEvent, type PtySpawnOptions } from '../shared/ipc'
 import { onPtyChunk, clearSession as clearWaitState } from './remote/waitDetector'
 
 // Windows PowerShell 5.1 — pwsh.exe (PS7) is not installed on this machine.
@@ -23,6 +23,8 @@ interface Session {
   tabKind?: 'terminal' | 'claude-code' | 'log-tail' | 'deploy'
   label?: string
   scrollback: string
+  cols: number
+  rows: number
 }
 
 const sessions = new Map<string, Session>()
@@ -31,7 +33,7 @@ const sessions = new Map<string, Session>()
  *  remote server) that need pty data/exit/state without going through the
  *  renderer IPC channel. `pty.ts` doesn't know or care whether anything is
  *  listening; Remote is purely additive. Events: 'data' (PtyDataEvent),
- *  'exit' (PtyExitEvent). */
+ *  'exit' (PtyExitEvent), 'resize' (PtyResizeEvent). */
 export const ptyEvents = new EventEmitter()
 
 function shellArgs(shell: string, oneShotCommand?: string): string[] {
@@ -76,7 +78,9 @@ export function spawnPty(win: BrowserWindow, opts: PtySpawnOptions): void {
     cwd: opts.cwd,
     tabKind: opts.tabKind,
     label: opts.label,
-    scrollback: ''
+    scrollback: '',
+    cols: opts.cols,
+    rows: opts.rows
   })
 
   proc.onData((data) => {
@@ -109,6 +113,17 @@ export function getScrollback(id: string): string {
   return sessions.get(id)?.scrollback ?? ''
 }
 
+/** § ShinShell Remote — a session's current real dimensions, owned by the
+ *  desktop app's own xterm instance (see resizePty). The phone client needs
+ *  this to size its own xterm to match: if the phone's xterm.js runs at a
+ *  different `cols` than the pty was actually told, cursor-column escape
+ *  sequences (which ink's full-screen prompts rely on for layout) resolve
+ *  against the wrong width and render as a corrupted/misaligned box. */
+export function getSessionSize(id: string): { cols: number; rows: number } | undefined {
+  const session = sessions.get(id)
+  return session && { cols: session.cols, rows: session.rows }
+}
+
 /** § ShinShell Remote — which project window a session belongs to and
  *  whether it's a claude-code pane (gates remote input per §2 of the Remote
  *  server core: input is claude-code-only unless allowFullTerminalInput). */
@@ -132,7 +147,13 @@ export function writePty(id: string, data: string): void {
 }
 
 export function resizePty(id: string, cols: number, rows: number): void {
-  sessions.get(id)?.proc.resize(cols, rows)
+  const session = sessions.get(id)
+  if (!session) return
+  session.proc.resize(cols, rows)
+  session.cols = cols
+  session.rows = rows
+  const payload: PtyResizeEvent = { id, cols, rows }
+  ptyEvents.emit('resize', payload)
 }
 
 export function killPty(id: string): void {

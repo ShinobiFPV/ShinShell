@@ -19,6 +19,13 @@ export type ServerFrame =
   | { type: 'state'; tabId: string; status: WaitStatus }
   | { type: 'data'; tabId: string; data: string }
   | { type: 'exit'; tabId: string; exitCode: number }
+  // § cols-mismatch fix — the pty's *real* cols/rows, owned by the desktop
+  // app's own xterm (see src/main/pty.ts's resizePty). Sent once right after
+  // 'scrollback' on subscribe, and again on every live resize. The phone's
+  // xterm.js must match these cols or ink's cursor-column escape sequences
+  // (permission prompts etc.) resolve against the wrong width and render
+  // corrupted -- see TerminalView.tsx's refit().
+  | { type: 'resize'; tabId: string; cols: number; rows: number }
   // § connection UX (§6) — sent every ~4s to every authenticated connection
   // so the client can detect a half-dead socket (readyState still "open"
   // but nothing's actually arriving) within ~10s instead of waiting on the
