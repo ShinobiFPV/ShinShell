@@ -28,7 +28,15 @@
   DetailPrint "Scheduled task registration exit code: $0"
 
   DetailPrint "Creating shortcuts..."
-  CreateShortcut "$DESKTOP\ShinShell.lnk" "$WINDIR\System32\schtasks.exe" "/run /tn ShinShell" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0
+  ; This is a perMachine install (SetShellVarContext defaults to "all"),
+  ; which would otherwise resolve $DESKTOP to the shared Public Desktop —
+  ; but "ShinTech Installs" is an existing per-user folder on the installing
+  ; user's own Desktop (already holding e.g. ShinLink OS's shortcut), so the
+  ; desktop shortcut specifically needs the "current" user context.
+  SetShellVarContext current
+  CreateDirectory "$DESKTOP\ShinTech Installs"
+  CreateShortcut "$DESKTOP\ShinTech Installs\ShinShell.lnk" "$WINDIR\System32\schtasks.exe" "/run /tn ShinShell" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0
+  SetShellVarContext all
   CreateDirectory "$SMPROGRAMS\ShinShell"
   CreateShortcut "$SMPROGRAMS\ShinShell\ShinShell.lnk" "$WINDIR\System32\schtasks.exe" "/run /tn ShinShell" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0
 !macroend
@@ -39,7 +47,10 @@
   nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\unregister-task.ps1"'
   Pop $0
 
-  Delete "$DESKTOP\ShinShell.lnk"
+  SetShellVarContext current
+  Delete "$DESKTOP\ShinTech Installs\ShinShell.lnk"
+  RMDir "$DESKTOP\ShinTech Installs"
+  SetShellVarContext all
   Delete "$SMPROGRAMS\ShinShell\ShinShell.lnk"
   RMDir "$SMPROGRAMS\ShinShell"
 !macroend
