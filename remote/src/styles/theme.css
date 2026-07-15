@@ -605,6 +605,54 @@ input {
   white-space: nowrap;
 }
 
+/* § Session view polish -- Claude Code's permission dialog, parsed off the
+   xterm buffer (see permissionPrompt.ts) and shown here instead of the raw
+   ink box, which garbles on a narrow phone width. Covers the canvas fully
+   (same inset as .terminal-view-canvas) so the raw box is never visible
+   while a prompt is up. */
+.permission-prompt-card {
+  --card-accent: #00dc78;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--card-accent) 4%, #0b0d10);
+}
+
+.permission-prompt-header {
+  font-size: 15px;
+  line-height: 1.4;
+  color: #e6e8eb;
+  white-space: pre-wrap;
+}
+
+.permission-prompt-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.permission-prompt-option {
+  text-align: left;
+  padding: 12px 14px;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 35%, #2a2e35);
+  background: color-mix(in srgb, var(--card-accent) 6%, #14171b);
+  font-size: 14px;
+  white-space: normal;
+}
+
+.permission-prompt-option-selected {
+  border-color: var(--card-accent);
+  border-width: 2px;
+  font-weight: 600;
+}
+
 .terminal-arrow-row {
   padding-top: 0;
   border-top: none;

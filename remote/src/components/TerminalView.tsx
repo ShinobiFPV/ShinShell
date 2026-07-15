@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { MultiplexClient } from '../ws/MultiplexClient'
 import QuickActionButton from './QuickActionButton'
+import PermissionPromptCard from './PermissionPromptCard'
 import {
   clampFontSize,
   loadFontSize,
@@ -14,6 +15,7 @@ import {
   type CustomAction
 } from '../localSettings'
 import { apiUrl } from '../apiBase'
+import { computeKeySequence, detectPermissionPrompt, promptsEqual, type ParsedPrompt } from '../permissionPrompt'
 
 interface TerminalViewProps {
   tabId: string
@@ -78,6 +80,8 @@ export default function TerminalView({
   const [draft, setDraft] = useState('')
   const [history, setHistory] = useState<string[]>(loadSendHistory)
   const [historyPos, setHistoryPos] = useState<number | null>(null)
+  const [prompt, setPrompt] = useState<ParsedPrompt | null>(null)
+  const promptRef = useRef<ParsedPrompt | null>(null)
 
   const applyFontSize = useCallback((size: number) => {
     const clamped = clampFontSize(size)
@@ -93,6 +97,11 @@ export default function TerminalView({
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
+
+    // A tab switch remounts the terminal for a different session entirely --
+    // any permission prompt detected against the previous one is stale.
+    promptRef.current = null
+    setPrompt(null)
 
     const xterm = new XTerm({
       fontSize,
@@ -119,13 +128,33 @@ export default function TerminalView({
     }
     xterm.onScroll(updateAtBottom)
 
+    // Re-parse the tail of the buffer for a permission-style prompt after
+    // every chunk (see permissionPrompt.ts) -- independent of the server's
+    // busy/waiting/idle classification, which waits out a quiet period
+    // before flipping and would add a needless delay before the card shows.
+    const refreshPrompt = (): void => {
+      const next = detectPermissionPrompt(xterm)
+      if (!promptsEqual(promptRef.current, next)) {
+        promptRef.current = next
+        setPrompt(next)
+      }
+    }
+    const onWrite = (): void => {
+      updateAtBottom()
+      refreshPrompt()
+    }
+
     const resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(container)
 
     const unsubscribe = client.subscribe(tabId, {
-      onScrollback: ({ data }) => xterm.write(data, updateAtBottom),
-      onData: ({ data }) => xterm.write(data, updateAtBottom),
-      onExit: ({ exitCode }) => xterm.write(`\r\n[session ended, exit ${exitCode}]\r\n`, updateAtBottom)
+      onScrollback: ({ data }) => xterm.write(data, onWrite),
+      onData: ({ data }) => xterm.write(data, onWrite),
+      onExit: ({ exitCode }) => {
+        promptRef.current = null
+        setPrompt(null)
+        xterm.write(`\r\n[session ended, exit ${exitCode}]\r\n`, updateAtBottom)
+      }
     })
 
     return () => {
@@ -185,6 +214,15 @@ export default function TerminalView({
     client.sendInput(tabId, `${value}\r`)
   }
 
+  const selectPromptOption = (index: number): void => {
+    if (!prompt) return
+    client.sendInput(tabId, computeKeySequence(prompt, index))
+    // Optimistic hide -- avoids a stale, still-tappable card during the
+    // round trip; the next chunk naturally restores or re-detects as needed.
+    promptRef.current = null
+    setPrompt(null)
+  }
+
   const submitDraft = useCallback(() => {
     if (!draft.trim()) return
     client.sendInput(tabId, `${draft}\r`)
@@ -239,6 +277,7 @@ export default function TerminalView({
             ↓ Jump to live
           </button>
         )}
+        {prompt && <PermissionPromptCard prompt={prompt} onSelect={selectPromptOption} />}
       </div>
 
       {allowInput ? (
