@@ -149,6 +149,13 @@ export default function TabStrip({
       <button className="tab-more" onMouseDown={onOpenTabPalette} title="More tab types (Ctrl+Shift+P)">
         &hellip;
       </button>
+      <button
+        className="tab-launcher"
+        onMouseDown={() => window.shinshell.window.openLauncher()}
+        title="Open project selection"
+      >
+        &#8862;
+      </button>
     </div>
   )
 }

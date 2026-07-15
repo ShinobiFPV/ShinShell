@@ -52,6 +52,12 @@ body::after {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* §UX1 — a slight wash of the project's accent color across the window
+     background, so the color coding reads even in the gaps around panes
+     (dividers, sidebar, non-opaque tab content) that the accent border
+     strips alone don't cover. Terminals/Monaco paint their own opaque
+     background over this, by design — this is chrome, not a text-area tint. */
+  background: color-mix(in srgb, var(--accent) 5%, #0c0c0c);
 }
 
 /* §UX2 — arm-to-confirm banner: pulses in the project's accent color while a
@@ -133,7 +139,7 @@ body::after {
 .tab-strip-row {
   display: flex;
   align-items: center;
-  background: #161616;
+  background: color-mix(in srgb, var(--accent) 8%, #161616);
   border-bottom: 1px solid #262626;
   padding: 4px 8px 0 6px;
   gap: 8px;
@@ -312,6 +318,28 @@ body::after {
   border-color: var(--accent);
 }
 
+/* Reopens the launcher (project selection) window — same "+"/"…" button
+   treatment, sat just to their right since it's the same class of
+   top-bar-level action rather than a tab operation. */
+.tab-launcher {
+  flex: 0 0 auto;
+  background: #1c1c1c;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 7px;
+  margin-left: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-launcher:hover {
+  color: #fff;
+  border-color: var(--accent);
+}
+
 /* content-area is a flex ROW: the tab content on the left, the hotkey
    sidebar on the right as a genuine flex sibling — so expanding/pinning the
    sidebar resizes (not overlays) the content, and every mounted terminal
@@ -351,7 +379,7 @@ body::after {
   min-height: 0;
   overflow: hidden;
   display: flex;
-  background: #141414;
+  background: color-mix(in srgb, var(--accent) 6%, #141414);
   border-left: 1px solid #262626;
   transition: flex-basis 0.2s ease, width 0.2s ease;
 }
@@ -403,7 +431,7 @@ body::after {
   flex: 0 0 280px;
   display: flex;
   flex-direction: column;
-  background: #141414;
+  background: color-mix(in srgb, var(--accent) 6%, #141414);
 }
 
 .hotkey-panel-header {
