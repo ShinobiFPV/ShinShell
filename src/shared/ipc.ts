@@ -62,6 +62,7 @@ export const IPC = {
   remoteRevokeDevice: 'remote:revokeDevice',
   remoteSetAllowFullInput: 'remote:setAllowFullInput',
   remoteSetAllowDeploy: 'remote:setAllowDeploy',
+  remoteSetAllowProjectControl: 'remote:setAllowProjectControl',
   remoteTestNotification: 'remote:testNotification',
   remoteGetQrDataUrl: 'remote:getQrDataUrl',
   remoteStatus: 'remote:status',
@@ -194,6 +195,9 @@ export interface RemoteStatus {
   /** § remote deploy (§5) — off by default; whether a paired phone can see
    *  and fire a project's deploy commands at all. */
   allowDeploy: boolean
+  /** § remote project control — off by default; whether a paired phone can
+   *  see closed projects and open/close project windows. */
+  allowProjectControl: boolean
 }
 
 export interface RemoteDevice {

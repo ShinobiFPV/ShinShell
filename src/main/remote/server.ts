@@ -17,8 +17,14 @@ import { ensureVapid, getVapidPublicKey, notifyAllDevices } from './push'
 import { getScrollback, getSessionMeta, listSessionIds, writePty, ptyEvents, spawnPty } from '../pty'
 import { waitEvents, getStatus as getWaitStatus, getStateSince, type WaitStatus } from './waitDetector'
 import { stripAnsi } from './ansi'
-import { listOpenProjectIds, getProjectIdForWindow, getOpenProjectWindow } from '../windows'
-import { getProject } from '../projects'
+import {
+  listOpenProjectIds,
+  getProjectIdForWindow,
+  getOpenProjectWindow,
+  openProjectWindow,
+  closeProjectWindow
+} from '../windows'
+import { getProject, listProjects } from '../projects'
 import { getCachedHealth } from '../sshHealth'
 import { validateProjectPath } from '../projectValidation'
 import { substituteVariables } from '../../shared/commandSubstitution'
@@ -308,11 +314,59 @@ function buildApp(): express.Express {
     // the bits the PWA needs to decide whether a tab's input bar, or a
     // card's deploy buttons, should show at all.
     const remoteState = loadRemoteState()
+    // § remote project control — like deployCommands above, omitted
+    // entirely (not just empty) while the toggle is off: a stolen device
+    // token shouldn't even learn which projects are configured but closed.
+    const closedProjects = remoteState.allowProjectControl
+      ? listProjects()
+          .filter((p) => !listOpenProjectIds().includes(p.id))
+          .map((p) => ({ id: p.id, name: p.name, accentColor: p.accentColor }))
+      : undefined
     res.json({
       projects,
       allowFullTerminalInput: remoteState.allowFullTerminalInput,
-      allowDeploy: remoteState.allowDeploy
+      allowDeploy: remoteState.allowDeploy,
+      allowProjectControl: remoteState.allowProjectControl,
+      closedProjects
     })
+  })
+
+  // § remote project control — opens a project window on the desktop from a
+  // paired phone. Mirrors the desktop launcher's own "open project" click;
+  // openProjectWindow() itself is idempotent (focuses an already-open
+  // window) so this is safe to call redundantly.
+  v1.post('/projects/:projectId/open', (req, res) => {
+    if (!loadRemoteState().allowProjectControl) {
+      res.status(403).json({ error: 'remote project control is not enabled' })
+      return
+    }
+    const config = getProject(req.params.projectId)
+    if (!config) {
+      res.status(404).json({ error: 'project not found' })
+      return
+    }
+    const win = openProjectWindow(req.params.projectId)
+    if (!win) {
+      res.status(500).json({ error: 'failed to open project window' })
+      return
+    }
+    res.json({ ok: true })
+  })
+
+  // § remote project control — closes a project window, tearing down its
+  // sessions exactly as the OS close button would (see
+  // windows.ts's closeProjectWindow).
+  v1.post('/projects/:projectId/close', (req, res) => {
+    if (!loadRemoteState().allowProjectControl) {
+      res.status(403).json({ error: 'remote project control is not enabled' })
+      return
+    }
+    const closed = closeProjectWindow(req.params.projectId)
+    if (!closed) {
+      res.status(404).json({ error: 'project window not open' })
+      return
+    }
+    res.json({ ok: true })
   })
 
   // § remote deploy (§5) — stateless by design: arm-to-confirm for
@@ -771,7 +825,8 @@ export function getRemoteStatus(): RemoteStatus {
     pairedDeviceCount: state.devices.length,
     pendingPin: pinLive ? state.pendingPin!.pin : null,
     allowFullTerminalInput: state.allowFullTerminalInput,
-    allowDeploy: state.allowDeploy
+    allowDeploy: state.allowDeploy,
+    allowProjectControl: state.allowProjectControl
   }
 }
 

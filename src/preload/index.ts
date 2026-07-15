@@ -175,6 +175,7 @@ const api = {
     revokeDevice: (id: string): void => ipcRenderer.send(IPC.remoteRevokeDevice, id),
     setAllowFullInput: (allow: boolean): void => ipcRenderer.send(IPC.remoteSetAllowFullInput, allow),
     setAllowDeploy: (allow: boolean): void => ipcRenderer.send(IPC.remoteSetAllowDeploy, allow),
+    setAllowProjectControl: (allow: boolean): void => ipcRenderer.send(IPC.remoteSetAllowProjectControl, allow),
     testNotification: (): Promise<void> => ipcRenderer.invoke(IPC.remoteTestNotification),
     getQrDataUrl: (): Promise<string | null> => ipcRenderer.invoke(IPC.remoteGetQrDataUrl),
     onStatus: (cb: (status: RemoteStatus) => void): (() => void) => {

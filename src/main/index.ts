@@ -227,6 +227,11 @@ function registerIpc(): void {
     state.allowDeploy = allow
     saveRemoteState(state)
   })
+  ipcMain.on(IPC.remoteSetAllowProjectControl, (_event, allow: boolean) => {
+    const state = loadRemoteState()
+    state.allowProjectControl = allow
+    saveRemoteState(state)
+  })
   ipcMain.handle(IPC.remoteTestNotification, () => sendTestNotification())
   ipcMain.handle(IPC.remoteGetQrDataUrl, async (): Promise<string | null> => {
     const status = getRemoteStatus()

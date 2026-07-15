@@ -9,7 +9,13 @@ import IosInstallBanner from './components/IosInstallBanner'
 import VersionMismatchBanner from './components/VersionMismatchBanner'
 import PairedDevicesSection from './components/PairedDevicesSection'
 import { MultiplexClient } from './ws/MultiplexClient'
-import type { NotificationSettings, RemoteHealth, RemoteProject, RemoteProjectsResponse } from './ws/protocol'
+import type {
+  NotificationSettings,
+  RemoteClosedProject,
+  RemoteHealth,
+  RemoteProject,
+  RemoteProjectsResponse
+} from './ws/protocol'
 import { subscribeToPush, isPushSubscribed } from './push/registerPush'
 import { loadCustomActions, saveCustomActions, type CustomAction } from './localSettings'
 import { idbSet, idbDelete } from './idb'
@@ -282,6 +288,12 @@ export default function App(): JSX.Element {
     cachedProjects?.data.allowFullTerminalInput ?? false
   )
   const [allowDeploy, setAllowDeploy] = useState(cachedProjects?.data.allowDeploy ?? false)
+  const [allowProjectControl, setAllowProjectControl] = useState(
+    cachedProjects?.data.allowProjectControl ?? false
+  )
+  const [closedProjects, setClosedProjects] = useState<RemoteClosedProject[]>(
+    cachedProjects?.data.closedProjects ?? []
+  )
   const [projectsAsOf, setProjectsAsOf] = useState<number | null>(cachedProjects?.at ?? null)
   const [health, setHealth] = useState<RemoteHealth | null>(cachedHealth?.data ?? null)
   const [screen, setScreen] = useState<Screen>('home')
@@ -337,6 +349,8 @@ export default function App(): JSX.Element {
       setProjects(body.projects)
       setAllowFullTerminalInput(body.allowFullTerminalInput)
       setAllowDeploy(body.allowDeploy)
+      setAllowProjectControl(body.allowProjectControl)
+      setClosedProjects(body.closedProjects ?? [])
       setProjectsAsOf(Date.now())
       saveLastProjects(body)
     } catch {
@@ -394,6 +408,7 @@ export default function App(): JSX.Element {
     clearLastKnown()
     setPairing(null)
     setProjects([])
+    setClosedProjects([])
     setHealth(null)
     setProjectsAsOf(null)
     setScreen('home')
@@ -429,6 +444,42 @@ export default function App(): JSX.Element {
         await refreshProjects()
         setActiveTabId(body.runId)
         setScreen('session')
+      } catch {
+        // offline — the "ShinShell is offline" banner already covers this
+      }
+    },
+    [pairing, refreshProjects]
+  )
+
+  // § remote project control — opens/closes a project window on the
+  // desktop, then refreshes so the card moves between the open grid and the
+  // closed list; no optimistic local update since the true source of truth
+  // (whether a BrowserWindow exists) only lives in the main process.
+  const startProject = useCallback(
+    async (projectId: string) => {
+      if (!pairing) return
+      try {
+        await fetch(apiUrl(pairing.serverUrl, `/projects/${projectId}/open`), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${pairing.token}` }
+        })
+        await refreshProjects()
+      } catch {
+        // offline — the "ShinShell is offline" banner already covers this
+      }
+    },
+    [pairing, refreshProjects]
+  )
+
+  const stopProject = useCallback(
+    async (projectId: string) => {
+      if (!pairing) return
+      try {
+        await fetch(apiUrl(pairing.serverUrl, `/projects/${projectId}/close`), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${pairing.token}` }
+        })
+        await refreshProjects()
       } catch {
         // offline — the "ShinShell is offline" banner already covers this
       }
@@ -482,6 +533,10 @@ export default function App(): JSX.Element {
             onSelectProject={openProject}
             allowDeploy={allowDeploy}
             onRunDeployCommand={runDeployCommand}
+            allowProjectControl={allowProjectControl}
+            closedProjects={closedProjects}
+            onOpenProject={startProject}
+            onCloseProject={stopProject}
             stale={!connected}
             dataAsOf={projectsAsOf}
           />

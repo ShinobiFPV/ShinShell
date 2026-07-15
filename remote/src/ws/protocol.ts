@@ -73,11 +73,26 @@ export interface RemoteProject {
   deployCommands?: RemoteDeployCommand[]
 }
 
+// § remote project control — a project that isn't currently open on the
+// desktop. Just enough to render a card and an "Open" button — there's no
+// live pty/state/health for something with no window.
+export interface RemoteClosedProject {
+  id: string
+  name: string
+  accentColor: string
+}
+
 // § remote deploy (§5) — GET /api/projects's response envelope.
 export interface RemoteProjectsResponse {
   projects: RemoteProject[]
   allowFullTerminalInput: boolean
   allowDeploy: boolean
+  /** § remote project control — off by default; whether this phone can see
+   *  closedProjects at all and open/close project windows. */
+  allowProjectControl: boolean
+  /** § remote project control — absent (not just empty) while
+   *  allowProjectControl is off; see server.ts's GET /api/projects. */
+  closedProjects?: RemoteClosedProject[]
 }
 
 // § actionable notifications (§3) — per-device push prefs, mirrors

@@ -80,6 +80,12 @@ export default function RemoteSettingsPanel({ onClose }: RemoteSettingsPanelProp
     setStatus({ ...status, allowDeploy: !status.allowDeploy })
   }, [status])
 
+  const toggleAllowProjectControl = useCallback(() => {
+    if (!status) return
+    window.shinshell.remote.setAllowProjectControl(!status.allowProjectControl)
+    setStatus({ ...status, allowProjectControl: !status.allowProjectControl })
+  }, [status])
+
   const sendTest = useCallback(async () => {
     setTestState('sending')
     await window.shinshell.remote.testNotification()
@@ -188,6 +194,21 @@ export default function RemoteSettingsPanel({ onClose }: RemoteSettingsPanelProp
                 <span className="remote-full-input-warning">
                   ⚠ With this on, a paired phone can see and fire a project's deploy commands. Dangerous
                   ones still require the same arm-then-confirm tap as the desktop deploy tab.
+                </span>
+              </label>
+
+              <label className="edit-project-field remote-full-input-row">
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={status.allowProjectControl}
+                    onChange={toggleAllowProjectControl}
+                  />{' '}
+                  Allow remote open/close
+                </span>
+                <span className="remote-full-input-warning">
+                  ⚠ With this on, a paired phone can see every configured project (not just open ones) and
+                  open or close their windows on this desktop.
                 </span>
               </label>
 

@@ -63,6 +63,12 @@ export interface RemoteState {
    *  commands" is a materially different risk than "let my phone type into
    *  a shell." */
   allowDeploy: boolean
+  /** § remote project control — off by default; whether a paired phone can
+   *  see projects that aren't currently open on the desktop, and open/close
+   *  project windows remotely. A separate flag from allowDeploy/
+   *  allowFullTerminalInput because it pops OS-level windows on the desktop
+   *  rather than acting inside a session that's already open. */
+  allowProjectControl: boolean
   vapid: VapidKeys | null
   devices: RemoteDeviceRecord[]
   pendingPin: PendingPin | null
@@ -73,6 +79,7 @@ function defaultState(): RemoteState {
     enabled: false,
     allowFullTerminalInput: false,
     allowDeploy: false,
+    allowProjectControl: false,
     vapid: null,
     devices: [],
     pendingPin: null

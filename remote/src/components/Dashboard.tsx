@@ -1,5 +1,5 @@
 import type { JSX } from 'preact'
-import type { RemoteHealth, RemoteProject } from '../ws/protocol'
+import type { RemoteClosedProject, RemoteHealth, RemoteProject } from '../ws/protocol'
 import { formatDuration } from '../util/time'
 import DeployButton from './DeployButton'
 
@@ -9,6 +9,12 @@ interface DashboardProps {
   onSelectProject: (projectId: string) => void
   allowDeploy: boolean
   onRunDeployCommand: (projectId: string, commandId: string) => void
+  /** § remote project control — off by default; gates both the closed-
+   *  projects list below and the per-card open/close buttons. */
+  allowProjectControl: boolean
+  closedProjects: RemoteClosedProject[]
+  onOpenProject: (projectId: string) => void
+  onCloseProject: (projectId: string) => void
   /** § connection UX (§6) — true whenever the WS isn't live, so the cards
    *  below might be showing a cached snapshot rather than this instant's
    *  truth. */
@@ -48,6 +54,10 @@ export default function Dashboard({
   onSelectProject,
   allowDeploy,
   onRunDeployCommand,
+  allowProjectControl,
+  closedProjects,
+  onOpenProject,
+  onCloseProject,
   stale,
   dataAsOf
 }: DashboardProps): JSX.Element {
@@ -77,6 +87,19 @@ export default function Dashboard({
           >
             <div class="project-card-header">
               <span class="project-card-name">{p.name}</span>
+              {allowProjectControl && (
+                <button
+                  type="button"
+                  class="project-card-close-btn"
+                  title={`Close ${p.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onCloseProject(p.id)
+                  }}
+                >
+                  Close
+                </button>
+              )}
               <span class={`project-card-state-dot project-card-state-${p.state}`} />
             </div>
             <div class="project-card-state-row">
@@ -115,6 +138,25 @@ export default function Dashboard({
           </div>
         ))}
       </div>
+      {allowProjectControl && closedProjects.length > 0 && (
+        <div class="dashboard-closed-section">
+          <div class="dashboard-closed-heading">Closed</div>
+          <div class="dashboard-closed-list">
+            {closedProjects.map((p) => (
+              <div
+                key={p.id}
+                class="closed-project-row"
+                style={{ '--card-accent': p.accentColor } as Record<string, string>}
+              >
+                <span class="closed-project-name">{p.name}</span>
+                <button type="button" class="closed-project-open-btn" onClick={() => onOpenProject(p.id)}>
+                  Open
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div class="dashboard-footer">
         {health ? (
           <span>

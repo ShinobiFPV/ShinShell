@@ -171,6 +171,19 @@ export function openProjectWindow(projectId: string): BrowserWindow | null {
   return win
 }
 
+/** § remote project control — closes a project's window the same way the OS
+ *  close button would (the existing `win.on('closed', ...)` handler in
+ *  openProjectWindow does the actual teardown: ptys, claude-chat views,
+ *  ssh-health, watch-sync, persisted open-project list). Returns false if
+ *  the project wasn't open, so callers can tell "nothing to do" from "did
+ *  it." */
+export function closeProjectWindow(projectId: string): boolean {
+  const win = projectWindows.get(projectId)
+  if (!win || win.isDestroyed()) return false
+  win.close()
+  return true
+}
+
 /** Reopen whatever project windows were open at last shutdown; if none (or first run), show the launcher. */
 export function restoreWindows(): void {
   const { openProjectIds } = loadAppState()
