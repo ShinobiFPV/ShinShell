@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.shintech.shinshell.remote",
+        "sha256_cert_fingerprints": ["5C:0B:63:B2:3A:F9:D0:59:F1:AD:DE:02:DC:98:6A:D0:C2:35:DB:09:44:B6:59:6E:64:96:8F:6E:2A:1C:7F:69"]
+      }
+    }]

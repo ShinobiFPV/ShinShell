@@ -9,3 +9,9 @@ release/
 client_secret_*.json
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# TWA signing key — never commit; back this up somewhere safe instead.
+remote/twa/*.keystore
+remote/twa/keystore-credentials.txt
+remote/twa/build/
+remote/twa/app/build/

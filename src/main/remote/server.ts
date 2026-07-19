@@ -558,7 +558,13 @@ function buildApp(): express.Express {
 
   expressApp.use(`/api/${API_VERSION}`, v1)
 
-  expressApp.use(express.static(pwaDistDir))
+  // dotfiles: 'allow' — express.static's default ('ignore') skips any path
+  // with a dot-prefixed segment, which silently swallows everything under
+  // .well-known/ (e.g. assetlinks.json for the Android TWA) and falls
+  // through to the catch-all below, serving index.html's HTML in place of
+  // the JSON Chrome's Digital Asset Links verifier expects — it fails to
+  // parse and the TWA falls back to a Custom Tab with a visible URL bar.
+  expressApp.use(express.static(pwaDistDir, { dotfiles: 'allow' }))
   expressApp.use((req, res) => {
     if (req.path.startsWith('/api')) {
       res.status(404).json({ error: 'not found' })

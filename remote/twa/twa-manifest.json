@@ -1,0 +1,49 @@
+{
+  "packageId": "com.shintech.shinshell.remote",
+  "host": "scarlettwitch.tail9249a1.ts.net:8443",
+  "name": "ShinShell Remote",
+  "launcherName": "ShinShell",
+  "display": "standalone",
+  "themeColor": "#0B0D10",
+  "themeColorDark": "#0B0D10",
+  "navigationColor": "#0B0D10",
+  "navigationColorDark": "#0B0D10",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#0B0D10",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://scarlettwitch.tail9249a1.ts.net:8443/icons/icon-512.png",
+  "maskableIconUrl": "https://scarlettwitch.tail9249a1.ts.net:8443/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./shinshell-remote.keystore",
+    "alias": "shinshell-remote"
+  },
+  "appVersionName": "2",
+  "appVersionCode": 2,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://scarlettwitch.tail9249a1.ts.net:8443/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://scarlettwitch.tail9249a1.ts.net:8443/",
+  "minSdkVersion": 21,
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "name": "release",
+      "value": "5C:0B:63:B2:3A:F9:D0:59:F1:AD:DE:02:DC:98:6A:D0:C2:35:DB:09:44:B6:59:6E:64:96:8F:6E:2A:1C:7F:69"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": [],
+  "appVersion": "2"
+}

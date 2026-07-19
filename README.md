@@ -256,6 +256,11 @@ Everything except the phone itself lives in this repo: the server in
 xterm.js, built separately and served by ShinShell itself, see
 `npm run build:remote`).
 
+**Android app:** `remote/twa/` wraps the PWA into a Trusted Web
+Activity (Bubblewrap) — a real installable APK, no address bar, same
+tailnet-only origin as the PWA. See docs/REMOTE_TWA.md for build/rebuild
+steps and the gotchas hit getting it working on Windows.
+
 ---
 
 ## Project config
