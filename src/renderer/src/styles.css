@@ -1528,26 +1528,66 @@ body::after {
   gap: 10px;
 }
 
-.edit-project-swatches {
-  display: flex;
-  gap: 6px;
-}
-
-.edit-project-swatch {
-  width: 22px;
-  height: 22px;
+.edit-project-accent-preview {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  padding: 0;
+  border: 2px solid #2e2e2e;
 }
 
-.edit-project-swatch.selected {
-  border-color: #fff;
+.edit-project-rgb-sliders {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-project-rgb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-project-rgb-label {
+  flex: 0 0 auto;
+  width: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: Consolas, monospace;
+}
+
+.edit-project-rgb-label-r {
+  color: #ff5f5f;
+}
+
+.edit-project-rgb-label-g {
+  color: #5fdc6e;
+}
+
+.edit-project-rgb-label-b {
+  color: #5f9dff;
+}
+
+.edit-project-rgb-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.edit-project-rgb-number {
+  flex: 0 0 auto;
+  width: 44px;
+  padding: 3px 5px !important;
+  font-size: 11px !important;
+  font-family: Consolas, monospace;
+  text-align: right;
 }
 
 .edit-project-hex {
-  flex: 1;
+  flex: 0 0 auto;
+  width: 82px;
   min-width: 0;
   font-family: Consolas, monospace;
 }

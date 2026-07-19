@@ -7,12 +7,28 @@ interface EditProjectDialogProps {
   onSaved: (updated: ProjectConfig) => void
 }
 
-// Same deterministic accent palette index.ts hands out to freshly-imported
-// projects — reused here as swatch choices rather than inventing a second
-// palette for the edit dialog.
-const ACCENT_SWATCHES = ['#33FF66', '#FF8000', '#E10600', '#00B8D9', '#B14EFF', '#FFD400']
-
 const PATH_CHECK_DEBOUNCE_MS = 300
+
+interface Rgb {
+  r: number
+  g: number
+  b: number
+}
+
+function hexToRgb(hex: string): Rgb | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return null
+  const n = parseInt(m[1], 16)
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+function rgbToHex({ r, g, b }: Rgb): string {
+  const clamp = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
+  return `#${[r, g, b]
+    .map((c) => clamp(c).toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`
+}
 
 const REASON_LABEL: Record<PathCandidate['reason'], string> = {
   'git-remote': 'git remote matches',
@@ -151,16 +167,37 @@ export default function EditProjectDialog({ project, onClose, onSaved }: EditPro
           <label className="edit-project-field">
             <span>Accent color</span>
             <div className="edit-project-accent-row">
-              <div className="edit-project-swatches">
-                {ACCENT_SWATCHES.map((c) => (
-                  <button
-                    key={c}
-                    className={`edit-project-swatch${c.toLowerCase() === accentColor.toLowerCase() ? ' selected' : ''}`}
-                    style={{ background: c }}
-                    onMouseDown={() => setAccentColor(c)}
-                    title={c}
-                  />
-                ))}
+              <div className="edit-project-accent-preview" style={{ background: accentColor }} />
+              <div className="edit-project-rgb-sliders">
+                {(['r', 'g', 'b'] as const).map((channel) => {
+                  const rgb = hexToRgb(accentColor) ?? { r: 0, g: 0, b: 0 }
+                  return (
+                    <div key={channel} className="edit-project-rgb-row">
+                      <span className={`edit-project-rgb-label edit-project-rgb-label-${channel}`}>
+                        {channel.toUpperCase()}
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={255}
+                        value={rgb[channel]}
+                        onChange={(e) => setAccentColor(rgbToHex({ ...rgb, [channel]: Number(e.target.value) }))}
+                      />
+                      <input
+                        type="number"
+                        className="edit-project-rgb-number"
+                        min={0}
+                        max={255}
+                        value={rgb[channel]}
+                        onChange={(e) => {
+                          const n = Number(e.target.value)
+                          if (Number.isNaN(n)) return
+                          setAccentColor(rgbToHex({ ...rgb, [channel]: n }))
+                        }}
+                      />
+                    </div>
+                  )
+                })}
               </div>
               <input
                 className="edit-project-hex"
